@@ -115,8 +115,8 @@ export default function LoginPage() {
                   <Lock size={13} />
                   Contraseña
                 </label>
-                <Link href="/olvidar-contrasena" className="text-[11px] hover:underline" style={{ color: 'var(--text-secondary)' }}>
-                  ¿La olvidaste?
+                <Link href="/olvidar-contrasena" className="text-[11px] hover:underline hover:text-red-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                  Cambiar / ¿Olvidaste tu contraseña?
                 </Link>
               </div>
               <div className="relative">
