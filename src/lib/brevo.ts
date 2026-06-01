@@ -2,14 +2,6 @@
 
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
 
-function getHeaders() {
-  return {
-    'accept': 'application/json',
-    'api-key': process.env.BREVO_API_KEY!,
-    'content-type': 'application/json',
-  }
-}
-
 const SENDER = {
   name:  process.env.BREVO_SENDER_NAME  || 'Área Mecánica INACAP',
   email: process.env.BREVO_SENDER_EMAIL || 'diego.henriquez34@gmail.com',
@@ -21,25 +13,54 @@ async function enviarCorreo(
   subject: string,
   htmlContent: string
 ) {
-  const body = {
-    sender: SENDER,
-    to: [{ email: to, name: toName }],
-    subject,
-    htmlContent,
+  const rawKeys = process.env.BREVO_API_KEY || ''
+  const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean)
+
+  if (apiKeys.length === 0) {
+    throw new Error('No se han configurado llaves API de Brevo (BREVO_API_KEY)')
   }
 
-  const res = await fetch(BREVO_API_URL, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(body),
-  })
+  let lastError = null
 
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Brevo error ${res.status}: ${err}`)
+  // Intentamos con cada llave secuencialmente en caso de cuota excedida u otro error
+  for (let i = 0; i < apiKeys.length; i++) {
+    const key = apiKeys[i]
+    try {
+      const headers = {
+        'accept': 'application/json',
+        'api-key': key,
+        'content-type': 'application/json',
+      }
+
+      const body = {
+        sender: SENDER,
+        to: [{ email: to, name: toName }],
+        subject,
+        htmlContent,
+      }
+
+      const res = await fetch(BREVO_API_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error(`HTTP ${res.status}: ${err}`)
+      }
+
+      // Si tiene éxito, retornamos el resultado inmediatamente
+      return await res.json()
+    } catch (e: any) {
+      console.warn(`[Brevo] Error al enviar con la llave #${i + 1}:`, e.message)
+      lastError = e
+      // Bucle continúa al siguiente elemento
+    }
   }
 
-  return res.json()
+  // Si todas las llaves fallaron, lanzamos el último error
+  throw new Error(`Todas las cuentas de Brevo configuradas fallaron. Último error: ${lastError?.message}`)
 }
 
 // ─── Tabla de items ────────────────────────────────────────────────────────
