@@ -1,0 +1,250 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+/* ─── Variables del sistema de diseño ──────────────────────────────────── */
+:root {
+  --nacap-red: #E63946;
+  --nacap-red-dark: #c1121f;
+  --bg-primary: #0D1B2A;
+  --bg-secondary: #112240;
+  --bg-card: #1B2838;
+  --bg-card-hover: #243447;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --text-primary: #F0F4F8;
+  --text-secondary: #8B9BB4;
+  --text-muted: #4A5568;
+  --accent-blue: #1E88E5;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+}
+
+/* ─── Base ──────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Scrollbar personalizada ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ─── Cards ─────────────────────────────────────────────────────────────── */
+.card {
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  transition: all 0.2s ease;
+}
+.card:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+/* ─── Botones ────────────────────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: white;
+  background: var(--nacap-red);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--nacap-red-dark);
+  box-shadow: 0 8px 24px rgba(230, 57, 70, 0.35);
+}
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.btn-secondary:hover {
+  background: rgba(255,255,255,0.10);
+  border-color: var(--border-hover);
+}
+.btn-secondary:active { transform: scale(0.97); }
+
+.btn-success {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: white;
+  background: #16a34a;
+  border: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.btn-success:hover:not(:disabled) {
+  background: #15803d;
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.3);
+}
+.btn-success:active { transform: scale(0.97); }
+.btn-success:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: white;
+  background: #dc2626;
+  border: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.btn-danger:hover { background: #b91c1c; box-shadow: 0 8px 24px rgba(220, 38, 38, 0.3); }
+.btn-danger:active { transform: scale(0.97); }
+
+/* ─── Inputs ─────────────────────────────────────────────────────────────── */
+.input-field {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: all 0.2s ease;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.input-field::placeholder { color: var(--text-muted); font-weight: 400; }
+.input-field:focus {
+  border-color: var(--nacap-red);
+  background: rgba(255,255,255,0.08);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+.input-field:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Badges de estado ───────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.badge-pending  { color: #F59E0B; background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.30); }
+.badge-approved { color: #22C55E; background: rgba(34,197,94,0.10);  border-color: rgba(34,197,94,0.30);  }
+.badge-rejected { color: #EF4444; background: rgba(239,68,68,0.10);  border-color: rgba(239,68,68,0.30);  }
+.badge-delivered{ color: #60A5FA; background: rgba(96,165,250,0.10); border-color: rgba(96,165,250,0.30); }
+
+/* ─── Glass effect ───────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(13, 27, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ─── Gradient text ──────────────────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #fff 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Select nativo estilizado ───────────────────────────────────────────── */
+select.input-field {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B9BB4' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
+}
+select.input-field option { background: #1B2838; color: #F0F4F8; }
+
+/* ─── Tabla ──────────────────────────────────────────────────────────────── */
+.nacap-table { width: 100%; font-size: 13px; border-collapse: separate; border-spacing: 0; }
+.nacap-table thead th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+}
+.nacap-table tbody tr { transition: background 0.15s ease; }
+.nacap-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+.nacap-table tbody td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text-primary); }
+
+/* ─── QR container ───────────────────────────────────────────────────────── */
+.qr-container { background: white; padding: 16px; border-radius: 16px; display: inline-block; }
+
+/* ─── Animaciones ────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(230, 57, 70, 0); }
+}
+
+.animate-fade-in   { animation: fadeIn 0.4s ease both; }
+.animate-slide-in  { animation: slideInRight 0.3s ease both; }
+.animate-pulse-glow{ animation: pulseGlow 2s infinite; }
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
