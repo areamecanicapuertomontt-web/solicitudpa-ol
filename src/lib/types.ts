@@ -1,6 +1,78 @@
 // Tipos principales del sistema de solicitud de materiales NACAP
 
-export type EstadoSolicitud = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA' | 'ENTREGADA'
+// ─── Tipos del Plan de Mantención ────────────────────────────────────────────
+
+export type NivelUso   = 'USO MAYOR' | 'USO MENOR'
+export type NivelCosto = 'COSTO MAYOR' | 'COSTO MENOR'
+export type FrecuenciaMantencion = 'ANUAL' | 'SEMESTRAL' | 'MENSUAL' | 'TRIMESTRAL'
+export type EstadoMantencion = 'P' | 'R' | 'C'
+
+export interface SeccionMantencion {
+  id: string
+  plan_id: string
+  numero: number
+  nombre: string
+  responsable: string | null
+  created_at: string
+}
+
+export interface Equipo {
+  id: string
+  seccion_id: string | null
+  numero_item: number
+  nombre: string
+  codigo_inventario: string | null
+  nivel_uso: NivelUso | null
+  nivel_costo: NivelCosto | null
+  frecuencia: FrecuenciaMantencion
+  mes_programado: string | null
+  estado_programado: EstadoMantencion
+  cantidad: number | null
+  requiere_calibracion: boolean | null
+  tiene_informe_tecnico: boolean
+  tiene_cert_calibracion: boolean
+  activo: boolean | null
+  observaciones: string | null
+  created_at: string
+  updated_at: string
+  // Relaciones (join)
+  secciones_mantencion?: SeccionMantencion
+}
+
+export interface PlanMantencion {
+  id: string
+  titulo: string
+  fecha: string
+  version: string
+  actualizado_segun: string | null
+  objetivo_general: string | null
+  activo: boolean
+  created_at: string
+}
+
+export interface ActividadPlanificacion {
+  id: string
+  plan_id: string
+  numero: number
+  actividad: string
+  responsable: string | null
+  frecuencia: string | null
+  detalle_meses: string | null
+  created_at: string
+}
+
+export interface RegistroMantencion {
+  id: string
+  equipo_id: string
+  fecha_realizado: string | null
+  tipo: 'PREVENTIVA' | 'CORRECTIVA' | null
+  estado: EstadoMantencion
+  tecnico: string | null
+  observaciones: string | null
+  created_at: string
+}
+
+export type EstadoSolicitud = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA' | 'ENTREGADA' | 'DEVUELTA' | 'DEVUELTA_INCOMPLETA'
 
 export type Jornada = 'D' | 'V'
 
@@ -21,6 +93,7 @@ export interface ItemSolicitud {
   cantidad: number
   descripcion: string
   estado_item: EstadoItem
+  devuelto?: boolean
 }
 
 export interface Solicitud {

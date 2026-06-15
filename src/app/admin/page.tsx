@@ -9,29 +9,105 @@ import {
   Sparkles, CheckCircle2, XCircle, Truck
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { Docente, Solicitud, Jornada, EstadoSolicitud } from '@/lib/types'
 
-interface Material {
-  id: string
-  nombre: string
-  descripcion: string | null
-  categoria: string | null
-  activo: boolean
-  created_at: string
+function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange
+}: {
+  currentPage: number
+  totalPages: number
+  onPageChange: (p: number) => void
+}) {
+  if (totalPages <= 1) return null
+
+  const range = []
+  const maxPagesToShow = 5
+  let start = Math.max(1, currentPage - 2)
+  let end = Math.min(totalPages, start + maxPagesToShow - 1)
+
+  if (end - start < maxPagesToShow - 1) {
+    start = Math.max(1, end - maxPagesToShow + 1)
+  }
+
+  for (let i = start; i <= end; i++) {
+    range.push(i)
+  }
+
+  return (
+    <div className="flex items-center justify-between border-t border-white/5 pt-4 mt-4 select-none">
+      <p className="text-xs text-gray-400">
+        Página <span className="text-white font-bold">{currentPage}</span> de <span className="text-white font-bold">{totalPages}</span>
+      </p>
+      <div className="flex items-center gap-1.5 font-medium">
+        <button
+          type="button"
+          disabled={currentPage === 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="btn-secondary !px-2.5 !py-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+        >
+          Anterior
+        </button>
+        
+        {start > 1 && (
+          <>
+            <button type="button" onClick={() => onPageChange(1)} className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${currentPage === 1 ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}>1</button>
+            {start > 2 && <span className="text-gray-600 text-xs px-1">...</span>}
+          </>
+        )}
+
+        {range.map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onPageChange(p)}
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+              currentPage === p 
+                ? 'bg-red-600 text-white' 
+                : 'hover:bg-white/5 text-gray-400 hover:text-white'
+            }`}
+            style={currentPage === p ? { background: 'var(--nacap-red)' } : {}}
+          >
+            {p}
+          </button>
+        ))}
+
+        {end < totalPages && (
+          <>
+            {end < totalPages - 1 && <span className="text-gray-600 text-xs px-1">...</span>}
+            <button type="button" onClick={() => onPageChange(totalPages)} className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${currentPage === totalPages ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}>{totalPages}</button>
+          </>
+        )}
+
+        <button
+          type="button"
+          disabled={currentPage === totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="btn-secondary !px-2.5 !py-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  )
 }
 
-type Tab = 'dashboard' | 'docentes' | 'materiales' | 'solicitudes' | 'diagnostico'
+type Tab = 'dashboard' | 'docentes' | 'alumnos' | 'solicitudes' | 'listo' | 'diagnostico'
 
 export default function AdminPage() {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [profile, setProfile] = useState<any>(null)
   
   // Data lists
   const [docentes, setDocentes] = useState<Docente[]>([])
-  const [materiales, setMateriales] = useState<Material[]>([])
+  const [alumnos, setAlumnos] = useState<any[]>([])
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
+  const [correosFallidos, setCorreosFallidos] = useState<any[]>([])
   
   // Counts / Database Diagnostics
   const [stats, setStats] = useState({
@@ -49,11 +125,14 @@ export default function AdminPage() {
   
   // Search and Filters
   const [searchDocente, setSearchDocente] = useState('')
-  const [searchMaterial, setSearchMaterial] = useState('')
+  const [searchAlumno, setSearchAlumno] = useState('')
   const [searchSolicitud, setSearchSolicitud] = useState('')
   const [filtroSolicitudEstado, setFiltroSolicitudEstado] = useState<EstadoSolicitud | 'TODAS'>('TODAS')
   const [filtroSolicitudJornada, setFiltroSolicitudJornada] = useState<Jornada | 'TODAS'>('TODAS')
   
+  // Sub-tabs Alumnos
+  const [subTabAlumnos, setSubTabAlumnos] = useState<'diurno' | 'vespertino'>('diurno')
+
   // Selected item detail modals
   const [selectedSolicitud, setSelectedSolicitud] = useState<Solicitud | null>(null)
 
@@ -66,50 +145,74 @@ export default function AdminPage() {
     asignatura: '',
     activo: true
   })
-  
-  // Material Form
-  const [showMaterialForm, setShowMaterialForm] = useState(false)
-  const [editingMaterial, setEditingMaterial] = useState<Material | null>(null)
-  const [materialForm, setMaterialForm] = useState({
+
+  // Alumno Form
+  const [showAlumnoModal, setShowAlumnoModal] = useState(false)
+  const [editingAlumno, setEditingAlumno] = useState<any | null>(null)
+  const [verAlumno, setVerAlumno] = useState<any | null>(null)
+  const [alumnoForm, setAlumnoForm] = useState({
     nombre: '',
-    descripcion: '',
-    categoria: 'Herramientas Manuales',
-    activo: true
+    email: '',
+    rut: '',
+    seccion: '',
+    jornada: 'D' as 'D' | 'V'
   })
+  const [savingAlumno, setSavingAlumno] = useState(false)
+
+  // Pagination states
+  const itemsPerPage = 10
+  const [pageDocentes, setPageDocentes] = useState(1)
+  const [pageAlumnosDiurno, setPageAlumnosDiurno] = useState(1)
+  const [pageAlumnosVespertino, setPageAlumnosVespertino] = useState(1)
+  const [pageSolicitudesActivas, setPageSolicitudesActivas] = useState(1)
+  const [pageSolicitudesListo, setPageSolicitudesListo] = useState(1)
+
+  // Reset page numbers on filter changes
+  useEffect(() => {
+    setPageDocentes(1)
+  }, [searchDocente])
+
+  useEffect(() => {
+    setPageAlumnosDiurno(1)
+    setPageAlumnosVespertino(1)
+  }, [searchAlumno])
+
+  useEffect(() => {
+    setPageSolicitudesActivas(1)
+    setPageSolicitudesListo(1)
+  }, [searchSolicitud, filtroSolicitudEstado, filtroSolicitudJornada])
+  
+
 
   // Load User Profile
   useEffect(() => {
     async function loadProfile() {
       const { data: { user } } = await supabaseBrowser.auth.getUser()
-      if (user) {
-        let perf = null
-        try {
-          const { data } = await supabaseBrowser
-            .from('perfiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-          perf = data
-        } catch (e) {
-          console.error("Error loading profile:", e)
-        }
-
-        if (!perf) {
-          perf = {
-            id: user.id,
-            email: user.email,
-            nombre: user.user_metadata?.nombre || 'Administrador Inacap',
-            rol: user.user_metadata?.rol || 'ADMIN',
-            rut: user.user_metadata?.rut || '',
-            jornada: user.user_metadata?.jornada || 'D',
-            seccion: user.user_metadata?.seccion || '',
-          }
-        }
-        setProfile(perf)
+      if (!user) {
+        router.replace('/login')
+        return
       }
+
+      let perf = null
+      try {
+        const { data } = await supabaseBrowser
+          .from('perfiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        perf = data
+      } catch (e) {
+        console.error("Error loading profile:", e)
+      }
+
+      if (!perf || (perf.rol !== 'ADMIN' && perf.rol !== 'PANOL')) {
+        router.replace('/login')
+        return
+      }
+      setProfile(perf)
     }
     loadProfile()
-  }, [])
+  }, [router])
 
   // Main fetch function
   const fetchData = async (silent = false) => {
@@ -125,13 +228,14 @@ export default function AdminPage() {
       if (docErr) throw docErr
       setDocentes(docData || [])
 
-      // 2. Fetch Materiales
-      const { data: matData, error: matErr } = await supabaseBrowser
-        .from('materiales')
+      // 2. Fetch Alumnos (public.perfiles where rol = 'ALUMNO')
+      const { data: alData, error: alErr } = await supabaseBrowser
+        .from('perfiles')
         .select('*')
+        .eq('rol', 'ALUMNO')
         .order('nombre')
-      if (matErr) throw matErr
-      setMateriales(matData || [])
+      if (alErr) throw alErr
+      setAlumnos(alData || [])
 
       // 3. Fetch Solicitudes (with teacher relations)
       const { data: solData, error: solErr } = await supabaseBrowser
@@ -172,6 +276,19 @@ export default function AdminPage() {
         asignaturasIMI: countIMI || 0,
         asignaturasMI: countMI || 0,
       })
+
+      // 5. Fetch failed email logs (correos_fallidos)
+      const { data: failEmails, error: failEmailsErr } = await supabaseBrowser
+        .from('correos_fallidos')
+        .select('*')
+        .order('fecha', { ascending: false })
+      
+      if (!failEmailsErr) {
+        setCorreosFallidos(failEmails || [])
+      } else {
+        console.warn("Tabla correos_fallidos no disponible o sin políticas RLS:", failEmailsErr.message)
+        setCorreosFallidos([])
+      }
 
     } catch (e: any) {
       console.error("Error fetching data in Admin Dashboard:", e)
@@ -308,98 +425,106 @@ export default function AdminPage() {
     }
   }
 
-  // ─── CRUD Materiales ───────────────────────────────────────────────────────
-  const startEditMaterial = (mat: Material) => {
-    setEditingMaterial(mat)
-    setMaterialForm({
-      nombre: mat.nombre,
-      descripcion: mat.descripcion || '',
-      categoria: mat.categoria || 'Herramientas Manuales',
-      activo: mat.activo
+  // ─── CRUD Alumnos (Estudiantes) ───────────────────────────────────────────
+  const startEditAlumno = (al: any) => {
+    setEditingAlumno(al)
+    setAlumnoForm({
+      nombre: al.nombre,
+      email: al.email,
+      rut: al.rut || '',
+      seccion: al.seccion || '',
+      jornada: al.jornada || 'D'
     })
-    setShowMaterialForm(true)
+    setShowAlumnoModal(true)
   }
 
-  const cancelMaterialForm = () => {
-    setShowMaterialForm(false)
-    setEditingMaterial(null)
-    setMaterialForm({ nombre: '', descripcion: '', categoria: 'Herramientas Manuales', activo: true })
+  const cancelAlumnoForm = () => {
+    setShowAlumnoModal(false)
+    setEditingAlumno(null)
+    setAlumnoForm({
+      nombre: '',
+      email: '',
+      rut: '',
+      seccion: '',
+      jornada: 'D'
+    })
   }
 
-  const handleSaveMaterial = async (e: React.FormEvent) => {
+  const handleSaveAlumno = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!materialForm.nombre) {
-      showNotification('err', 'Por favor ingresa el nombre de la herramienta')
+    if (!alumnoForm.nombre || !alumnoForm.email || !alumnoForm.rut || !alumnoForm.seccion || !alumnoForm.jornada) {
+      showNotification('err', 'Por favor completa todos los campos')
       return
     }
-
+    setSavingAlumno(true)
     try {
-      if (editingMaterial) {
-        const { error } = await supabaseBrowser
-          .from('materiales')
-          .update({
-            nombre: materialForm.nombre,
-            descripcion: materialForm.descripcion || null,
-            categoria: materialForm.categoria,
-            activo: materialForm.activo
-          })
-          .eq('id', editingMaterial.id)
-        
-        if (error) throw error
-        showNotification('ok', 'Herramienta actualizada correctamente')
-      } else {
-        const { error } = await supabaseBrowser
-          .from('materiales')
-          .insert({
-            nombre: materialForm.nombre,
-            descripcion: materialForm.descripcion || null,
-            categoria: materialForm.categoria,
-            activo: materialForm.activo
-          })
-        
-        if (error) throw error
-        showNotification('ok', 'Herramienta añadida al catálogo')
+      const isEdit = !!editingAlumno
+      const url = '/api/admin/estudiantes'
+      const method = isEdit ? 'PUT' : 'POST'
+      const body = isEdit 
+        ? { id: editingAlumno.id, ...alumnoForm }
+        : alumnoForm
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Ocurrió un error en el servidor')
       }
 
-      cancelMaterialForm()
+      showNotification('ok', isEdit ? 'Alumno actualizado correctamente' : 'Alumno registrado correctamente con clave temporal AlumnoInacap2026!')
+      cancelAlumnoForm()
       fetchData(true)
     } catch (err: any) {
       console.error(err)
-      showNotification('err', 'Error al guardar material. RLS restrictivo.')
+      showNotification('err', err.message || 'Error al guardar alumno.')
+    } finally {
+      setSavingAlumno(false)
     }
   }
 
-  const toggleMaterialActivo = async (mat: Material) => {
-    try {
-      const { error } = await supabaseBrowser
-        .from('materiales')
-        .update({ activo: !mat.activo })
-        .eq('id', mat.id)
-
-      if (error) throw error
-      showNotification('ok', `Herramienta ${!mat.activo ? 'habilitada' : 'deshabilitada'}`)
-      fetchData(true)
-    } catch (err: any) {
-      showNotification('err', 'Error al cambiar estado de la herramienta.')
-    }
-  }
-
-  const handleDeleteMaterial = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta herramienta del catálogo?')) return
+  const handleDeleteAlumno = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar permanentemente este alumno? Esta acción no se puede deshacer y borrará su cuenta de acceso.')) return
     setIsDeleting(id)
     try {
-      const { error } = await supabaseBrowser
-        .from('materiales')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-      showNotification('ok', 'Herramienta eliminada del catálogo')
+      const res = await fetch(`/api/admin/estudiantes?id=${id}`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al eliminar alumno')
+      }
+      showNotification('ok', 'Alumno eliminado correctamente')
+      if (verAlumno && verAlumno.id === id) {
+        setVerAlumno(null)
+      }
       fetchData(true)
     } catch (err: any) {
-      showNotification('err', 'Error al eliminar herramienta.')
+      console.error(err)
+      showNotification('err', err.message || 'No se pudo eliminar el alumno.')
     } finally {
       setIsDeleting(null)
+    }
+  }
+
+  const handleLimpiarCorreosFallidos = async () => {
+    if (!confirm('¿Estás seguro de que deseas vaciar el historial de correos fallidos?')) return
+    try {
+      const { error } = await supabaseBrowser
+        .from('correos_fallidos')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Borrar todos
+      
+      if (error) throw error
+      setCorreosFallidos([])
+      showNotification('ok', 'Historial de correos fallidos limpiado con éxito.')
+    } catch (err: any) {
+      console.error('Error al limpiar correos fallidos:', err.message)
+      showNotification('err', 'No se pudo limpiar el historial: ' + err.message)
     }
   }
 
@@ -416,7 +541,13 @@ export default function AdminPage() {
       
       // Update selected modal detail view if open
       if (selectedSolicitud && selectedSolicitud.id === id) {
-        setSelectedSolicitud(prev => prev ? { ...prev, estado: nuevoEstado } : null)
+        const isFinalized = nuevoEstado === 'DEVUELTA' || nuevoEstado === 'RECHAZADA'
+        const matchesTab = activeTab === 'listo' ? isFinalized : !isFinalized
+        if (!matchesTab) {
+          setSelectedSolicitud(null)
+        } else {
+          setSelectedSolicitud(prev => prev ? { ...prev, estado: nuevoEstado } : null)
+        }
       }
       fetchData(true)
     } catch (err: any) {
@@ -450,13 +581,30 @@ export default function AdminPage() {
     )
   }, [docentes, searchDocente])
 
-  const filteredMateriales = useMemo(() => {
-    return materiales.filter(m => 
-      m.nombre.toLowerCase().includes(searchMaterial.toLowerCase()) ||
-      (m.descripcion || '').toLowerCase().includes(searchMaterial.toLowerCase()) ||
-      (m.categoria || '').toLowerCase().includes(searchMaterial.toLowerCase())
+  const paginatedDocentes = useMemo(() => {
+    const startIndex = (pageDocentes - 1) * itemsPerPage
+    return filteredDocentes.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredDocentes, pageDocentes])
+
+  const filteredAlumnosDiurno = useMemo(() => {
+    return alumnos.filter(al => 
+      al.jornada === 'D' &&
+      (al.nombre.toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       al.email.toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       (al.rut || '').toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       (al.seccion || '').toLowerCase().includes(searchAlumno.toLowerCase()))
     )
-  }, [materiales, searchMaterial])
+  }, [alumnos, searchAlumno])
+
+  const filteredAlumnosVespertino = useMemo(() => {
+    return alumnos.filter(al => 
+      al.jornada === 'V' &&
+      (al.nombre.toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       al.email.toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       (al.rut || '').toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       (al.seccion || '').toLowerCase().includes(searchAlumno.toLowerCase()))
+    )
+  }, [alumnos, searchAlumno])
 
   const filteredSolicitudes = useMemo(() => {
     return solicitudes.filter(s => {
@@ -466,12 +614,22 @@ export default function AdminPage() {
         s.asignatura.toLowerCase().includes(searchSolicitud.toLowerCase()) ||
         (s.codigo_entrega || '').includes(searchSolicitud)
 
+      // Separación de solicitudes concluidas (Listas) de las activas
+      const isFinalized = s.estado === 'DEVUELTA' || s.estado === 'RECHAZADA'
+      const matchesTab = activeTab === 'listo' ? isFinalized : !isFinalized
+
       const matchesEstado = filtroSolicitudEstado === 'TODAS' || s.estado === filtroSolicitudEstado
       const matchesJornada = filtroSolicitudJornada === 'TODAS' || s.jornada === filtroSolicitudJornada
 
-      return matchesSearch && matchesEstado && matchesJornada
+      return matchesSearch && matchesTab && matchesEstado && matchesJornada
     })
-  }, [solicitudes, searchSolicitud, filtroSolicitudEstado, filtroSolicitudJornada])
+  }, [solicitudes, searchSolicitud, filtroSolicitudEstado, filtroSolicitudJornada, activeTab])
+
+  const paginatedSolicitudes = useMemo(() => {
+    const page = activeTab === 'listo' ? pageSolicitudesListo : pageSolicitudesActivas
+    const startIndex = (page - 1) * itemsPerPage
+    return filteredSolicitudes.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredSolicitudes, pageSolicitudesActivas, pageSolicitudesListo, activeTab])
 
   // Overview dashboard calculations
   const dashboardStats = useMemo(() => {
@@ -482,10 +640,9 @@ export default function AdminPage() {
       aprobadas: solicitudes.filter(s => s.estado === 'APROBADA').length,
       entregadas: solicitudes.filter(s => s.estado === 'ENTREGADA').length,
       creadasHoy: solicitudes.filter(s => s.created_at.startsWith(today)).length,
-      docentesActivos: docentes.filter(d => d.activo).length,
-      materialesTotal: materiales.length
+      docentesActivos: docentes.filter(d => d.activo).length
     }
-  }, [solicitudes, docentes, materiales])
+  }, [solicitudes, docentes])
 
   return (
     <main className="min-h-screen py-8 px-4 sm:px-6" style={{ background: 'var(--bg-primary)' }}>
@@ -557,18 +714,21 @@ export default function AdminPage() {
         {/* Navigation Tabs */}
         <div className="flex gap-1 mb-6 p-1 rounded-xl bg-white/2 border border-white/5 overflow-x-auto select-none no-scrollbar">
           {[
-            { id: 'dashboard', label: 'Resumen', icon: <LayoutDashboard size={14} /> },
-            { id: 'docentes', label: 'Docentes', icon: <Users size={14} /> },
-            { id: 'materiales', label: 'Catálogo Pañol', icon: <Wrench size={14} /> },
-            { id: 'solicitudes', label: 'Historial', icon: <FileText size={14} /> },
-            { id: 'diagnostico', label: 'Base de Datos', icon: <Database size={14} /> },
+            { id: 'dashboard',   label: 'Resumen',         icon: <LayoutDashboard size={14} /> },
+            { id: 'docentes',    label: 'Docentes',         icon: <Users size={14} /> },
+            { id: 'alumnos',     label: 'Estudiantes',      icon: <Users size={14} /> },
+            { id: 'solicitudes', label: 'Solicitudes Activas', icon: <FileText size={14} /> },
+            { id: 'listo',       label: 'Devueltas / Listo', icon: <CheckCircle2 size={14} /> },
+            { id: 'diagnostico', label: 'Base de Datos',   icon: <Database size={14} /> },
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id as Tab)
                 cancelDocenteForm()
-                cancelMaterialForm()
+                setFiltroSolicitudEstado('TODAS')
+                setSelectedSolicitud(null)
+                setSearchSolicitud('')
               }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap cursor-pointer"
               style={activeTab === tab.id
@@ -576,10 +736,29 @@ export default function AdminPage() {
                 : { color: 'var(--text-secondary)', background: 'transparent' }}
             >
               {tab.icon}
-              {tab.label}
+              <span>{tab.label}</span>
+              {tab.id === 'diagnostico' && correosFallidos.length > 0 && (
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+              )}
             </button>
           ))}
+          {/* Separador + link a módulo de Mantención */}
+          <div className="ml-auto flex items-center">
+            <div className="w-px h-6 mx-1" style={{ background: 'var(--border)' }} />
+            <Link
+              href="/admin/mantencion"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all"
+              style={{ background: 'rgba(30,136,229,0.12)', color: '#1E88E5', border: '1px solid rgba(30,136,229,0.25)' }}
+            >
+              <Wrench size={14} />
+              Plan Mantención
+            </Link>
+          </div>
         </div>
+
 
         {/* Main Content Loading */}
         {loading ? (
@@ -598,7 +777,7 @@ export default function AdminPage() {
                   {[
                     { label: 'Total Solicitudes', value: dashboardStats.total, color: 'var(--nacap-red)', icon: <FileText size={20} /> },
                     { label: 'Pendientes entrega', value: dashboardStats.pendientes, color: '#F59E0B', icon: <Clock size={20} /> },
-                    { label: 'Habilitadas en Catálogo', value: dashboardStats.materialesTotal, color: '#3B82F6', icon: <Wrench size={20} /> },
+                    { label: 'En Préstamo', value: dashboardStats.entregadas, color: '#3B82F6', icon: <Truck size={20} /> },
                     { label: 'Docentes Activos', value: dashboardStats.docentesActivos, color: '#10B981', icon: <Users size={20} /> },
                   ].map((s, idx) => (
                     <div key={idx} className="card p-5 relative overflow-hidden bg-gradient-to-br from-white/2 to-white/0">
@@ -618,7 +797,15 @@ export default function AdminPage() {
                       <h2 className="font-extrabold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                         <Clock size={16} className="text-red-500" /> Últimas Solicitudes Recibidas
                       </h2>
-                      <button onClick={() => setActiveTab('solicitudes')} className="text-xs text-red-500 font-bold hover:underline">
+                      <button 
+                        onClick={() => {
+                          setActiveTab('solicitudes')
+                          setSelectedSolicitud(null)
+                          setFiltroSolicitudEstado('TODAS')
+                          setSearchSolicitud('')
+                        }} 
+                        className="text-xs text-red-500 font-bold hover:underline"
+                      >
                         Ver todas →
                       </button>
                     </div>
@@ -645,16 +832,21 @@ export default function AdminPage() {
                                 className="cursor-pointer"
                                 onClick={() => {
                                   setSelectedSolicitud(sol)
-                                  setActiveTab('solicitudes')
+                                  const isFinalized = sol.estado === 'DEVUELTA' || sol.estado === 'RECHAZADA'
+                                  setActiveTab(isFinalized ? 'listo' : 'solicitudes')
+                                  setFiltroSolicitudEstado('TODAS')
+                                  setSearchSolicitud('')
                                 }}
                               >
                                 <td className="font-semibold">{sol.alumno}</td>
-                                <td>{sol.asignatura.split(' ')[0]} — {sol.seccion}</td>
+                                <td>{(sol.asignatura || '').split(' ')[0]} — {sol.seccion}</td>
                                 <td>
                                   <span className={`badge ${
                                     sol.estado === 'PENDIENTE' ? 'badge-pending' :
                                     sol.estado === 'APROBADA' ? 'badge-approved' :
-                                    sol.estado === 'RECHAZADA' ? 'badge-rejected' : 'badge-delivered'
+                                    sol.estado === 'DEVUELTA' ? 'badge-approved' :
+                                    sol.estado === 'RECHAZADA' ? 'badge-rejected' :
+                                    sol.estado === 'DEVUELTA_INCOMPLETA' ? 'badge-pending' : 'badge-delivered'
                                   }`}>
                                     {sol.estado}
                                   </span>
@@ -815,7 +1007,7 @@ export default function AdminPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredDocentes.map(doc => (
+                          {paginatedDocentes.map(doc => (
                             <tr key={doc.id} className="group">
                               <td className="font-semibold flex items-center gap-2.5 py-3">
                                 <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black uppercase text-red-500 bg-red-500/10">
@@ -861,187 +1053,213 @@ export default function AdminPage() {
                           ))}
                         </tbody>
                       </table>
+                      <Pagination
+                        currentPage={pageDocentes}
+                        totalPages={Math.ceil(filteredDocentes.length / itemsPerPage)}
+                        onPageChange={setPageDocentes}
+                      />
                     </div>
                   )}
                 </div>
               </div>
             )}
 
-            {/* ─── PESTAÑA: MATERIALES ──────────────────────────────────────── */}
-            {activeTab === 'materiales' && (
+            {/* ─── PESTAÑA: ALUMNOS ────────────────────────────────────────── */}
+            {activeTab === 'alumnos' && (
               <div className="space-y-4 animate-fade-in">
-                {/* Header search/add toggle */}
+                {/* Header with Search and Add buttons */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="relative w-full sm:max-w-xs">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      className="input-field !pl-9 text-xs"
-                      placeholder="Buscar por herramienta o categoría..."
-                      value={searchMaterial}
-                      onChange={e => setSearchMaterial(e.target.value)}
-                    />
+                  {/* Sub-tabs: Diurno vs Vespertino */}
+                  <div className="flex gap-1 p-1 rounded-xl bg-white/2 border border-white/5 select-none w-full sm:w-auto">
+                    <button
+                      onClick={() => setSubTabAlumnos('diurno')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer`}
+                      style={subTabAlumnos === 'diurno'
+                        ? { background: 'var(--nacap-red)', color: 'white' }
+                        : { color: 'var(--text-secondary)', background: 'transparent' }}
+                    >
+                      Jornada Diurna ({filteredAlumnosDiurno.length})
+                    </button>
+                    <button
+                      onClick={() => setSubTabAlumnos('vespertino')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer`}
+                      style={subTabAlumnos === 'vespertino'
+                        ? { background: 'var(--nacap-red)', color: 'white' }
+                        : { color: 'var(--text-secondary)', background: 'transparent' }}
+                    >
+                      Jornada Vespertina ({filteredAlumnosVespertino.length})
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => {
-                      if (showMaterialForm) cancelMaterialForm()
-                      else setShowMaterialForm(true)
-                    }} 
-                    className="btn-primary !py-2 !px-4 text-xs w-full sm:w-auto"
-                  >
-                    {showMaterialForm ? <X size={14} /> : <Plus size={14} />}
-                    {showMaterialForm ? 'Cerrar Formulario' : 'Agregar Herramienta'}
-                  </button>
-                </div>
 
-                {/* Formulario Material */}
-                {showMaterialForm && (
-                  <form onSubmit={handleSaveMaterial} className="card p-5 space-y-4 bg-gradient-to-r from-white/2 to-white/0 animate-fade-in">
-                    <h3 className="font-extrabold text-sm uppercase tracking-wider text-red-500 border-b border-white/5 pb-2">
-                      {editingMaterial ? 'Editar Herramienta Catalogada' : 'Añadir Nueva Herramienta al Inventario'}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="md:col-span-2">
-                        <label className="label">Nombre de la Herramienta</label>
-                        <input
-                          required
-                          type="text"
-                          className="input-field"
-                          placeholder="Llave Torquímetro de 1/2 pulgada (Pro)"
-                          value={materialForm.nombre}
-                          onChange={e => setMaterialForm(p => ({ ...p, nombre: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Categoría</label>
-                        <select
-                          className="input-field"
-                          value={materialForm.categoria}
-                          onChange={e => setMaterialForm(p => ({ ...p, categoria: e.target.value }))}
-                        >
-                          <option value="Herramientas Manuales">Herramientas Manuales</option>
-                          <option value="Herramientas Neumáticas">Herramientas Neumáticas</option>
-                          <option value="Instrumentación">Instrumentación</option>
-                          <option value="Equipos de Levante">Equipos de Levante</option>
-                          <option value="Equipos Eléctricos">Equipos Eléctricos</option>
-                          <option value="Seguridad / Otros">Seguridad / Otros</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="label">Descripción / Especificaciones Técnicas (Opcional)</label>
+                  {/* Search and Add controls */}
+                  <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                    <div className="relative w-full sm:max-w-xs">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="text"
-                        className="input-field"
-                        placeholder="Rango de torque 10-150 ft-lbs, calibración certificada."
-                        value={materialForm.descripcion}
-                        onChange={e => setMaterialForm(p => ({ ...p, descripcion: e.target.value }))}
+                        className="input-field !pl-9 text-xs"
+                        placeholder="Buscar por rut, nombre, seccion..."
+                        value={searchAlumno}
+                        onChange={e => setSearchAlumno(e.target.value)}
                       />
                     </div>
+                    <button
+                      onClick={() => {
+                        cancelAlumnoForm()
+                        setShowAlumnoModal(true)
+                      }}
+                      className="btn-primary !py-2 !px-4 text-xs w-full sm:w-auto flex items-center justify-center gap-2"
+                    >
+                      <Plus size={14} /> Registrar Estudiante
+                    </button>
+                  </div>
+                </div>
 
-                    <div className="flex items-center justify-between border-t border-white/5 pt-4">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="material_activo_check"
-                          className="w-4 h-4 accent-red-600 rounded"
-                          checked={materialForm.activo}
-                          onChange={e => setMaterialForm(p => ({ ...p, activo: e.target.checked }))}
-                        />
-                        <label htmlFor="material_activo_check" className="text-xs font-bold text-gray-300 uppercase cursor-pointer select-none">
-                          Habilitada para préstamos
-                        </label>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button type="submit" className="btn-success !py-2 !px-4 text-xs">
-                          <Save size={14} /> Guardar Herramienta
-                        </button>
-                        <button type="button" onClick={cancelMaterialForm} className="btn-secondary !py-2 !px-4 text-xs">
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                )}
-
-                {/* Listado Materiales */}
+                {/* Table block */}
                 <div className="card p-5">
-                  {filteredMateriales.length === 0 ? (
-                    <div className="text-center py-10 text-gray-500">
-                      No se encontraron herramientas registradas
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="nacap-table">
-                        <thead>
-                          <tr>
-                            <th>Herramienta</th>
-                            <th>Categoría</th>
-                            <th>Descripción</th>
-                            <th className="text-center">Estado</th>
-                            <th className="text-right">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredMateriales.map(mat => (
-                            <tr key={mat.id} className="group">
-                              <td className="font-semibold py-3 flex items-center gap-2">
-                                <span className="p-1.5 rounded-lg bg-white/5 text-gray-400 group-hover:text-red-500 transition-colors">
-                                  <Wrench size={13} />
-                                </span>
-                                <span>{mat.nombre}</span>
-                              </td>
-                              <td>
-                                <span className="text-xs px-2 py-0.5 rounded bg-white/5 text-gray-300 uppercase font-bold tracking-wide">
-                                  {mat.categoria || 'Sin categoría'}
-                                </span>
-                              </td>
-                              <td className="text-gray-400 text-xs italic">{mat.descripcion || '— Sin descripción técnica —'}</td>
-                              <td className="text-center">
-                                <button 
-                                  onClick={() => toggleMaterialActivo(mat)}
-                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
-                                    mat.activo 
-                                      ? 'bg-green-500/10 border-green-500/30 text-green-500' 
-                                      : 'bg-red-500/10 border-red-500/30 text-red-500'
-                                  }`}
-                                  title="Haz clic para alternar préstamos"
-                                >
-                                  {mat.activo ? 'DISPONIBLE' : 'BLOQUEADA'}
-                                </button>
-                              </td>
-                              <td className="text-right">
-                                <div className="flex justify-end gap-1">
-                                  <button
-                                    onClick={() => startEditMaterial(mat)}
-                                    className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
-                                    title="Editar Herramienta"
-                                  >
-                                    <Pencil size={13} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteMaterial(mat.id)}
-                                    disabled={isDeleting === mat.id}
-                                    className="p-2 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors"
-                                    title="Eliminar Herramienta"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              </td>
+                  {subTabAlumnos === 'diurno' ? (
+                    filteredAlumnosDiurno.length === 0 ? (
+                      <div className="text-center py-10 text-gray-500">
+                        No se encontraron alumnos en la jornada diurna
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="nacap-table">
+                          <thead>
+                            <tr>
+                              <th>Nombre</th>
+                              <th>RUT</th>
+                              <th>Email</th>
+                              <th>Sección</th>
+                              <th className="text-right">Acciones</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {filteredAlumnosDiurno
+                              .slice((pageAlumnosDiurno - 1) * itemsPerPage, pageAlumnosDiurno * itemsPerPage)
+                              .map(al => (
+                                <tr key={al.id} className="group">
+                                  <td className="font-semibold flex items-center gap-2.5 py-3">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black uppercase text-red-500 bg-red-500/10">
+                                      {al.nombre.charAt(0)}
+                                    </div>
+                                    <span>{al.nombre}</span>
+                                  </td>
+                                  <td className="text-gray-300 font-mono">{al.rut || '—'}</td>
+                                  <td className="text-gray-400">{al.email}</td>
+                                  <td className="text-gray-400 font-bold">{al.seccion || '—'}</td>
+                                  <td className="text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <button
+                                        onClick={() => setVerAlumno(al)}
+                                        className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                                        title="Ver Perfil"
+                                      >
+                                        <Eye size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => startEditAlumno(al)}
+                                        className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                                        title="Editar Perfil"
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteAlumno(al.id)}
+                                        disabled={isDeleting === al.id}
+                                        className="p-2 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors"
+                                        title="Eliminar Estudiante"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                        <Pagination
+                          currentPage={pageAlumnosDiurno}
+                          totalPages={Math.ceil(filteredAlumnosDiurno.length / itemsPerPage)}
+                          onPageChange={setPageAlumnosDiurno}
+                        />
+                      </div>
+                    )
+                  ) : (
+                    filteredAlumnosVespertino.length === 0 ? (
+                      <div className="text-center py-10 text-gray-500">
+                        No se encontraron alumnos en la jornada vespertina
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="nacap-table">
+                          <thead>
+                            <tr>
+                              <th>Nombre</th>
+                              <th>RUT</th>
+                              <th>Email</th>
+                              <th>Sección</th>
+                              <th className="text-right">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredAlumnosVespertino
+                              .slice((pageAlumnosVespertino - 1) * itemsPerPage, pageAlumnosVespertino * itemsPerPage)
+                              .map(al => (
+                                <tr key={al.id} className="group">
+                                  <td className="font-semibold flex items-center gap-2.5 py-3">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black uppercase text-red-500 bg-red-500/10">
+                                      {al.nombre.charAt(0)}
+                                    </div>
+                                    <span>{al.nombre}</span>
+                                  </td>
+                                  <td className="text-gray-300 font-mono">{al.rut || '—'}</td>
+                                  <td className="text-gray-400">{al.email}</td>
+                                  <td className="text-gray-400 font-bold">{al.seccion || '—'}</td>
+                                  <td className="text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <button
+                                        onClick={() => setVerAlumno(al)}
+                                        className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                                        title="Ver Perfil"
+                                      >
+                                        <Eye size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => startEditAlumno(al)}
+                                        className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                                        title="Editar Perfil"
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteAlumno(al.id)}
+                                        disabled={isDeleting === al.id}
+                                        className="p-2 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors"
+                                        title="Eliminar Estudiante"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                        <Pagination
+                          currentPage={pageAlumnosVespertino}
+                          totalPages={Math.ceil(filteredAlumnosVespertino.length / itemsPerPage)}
+                          onPageChange={setPageAlumnosVespertino}
+                        />
+                      </div>
+                    )
                   )}
                 </div>
               </div>
             )}
 
             {/* ─── PESTAÑA: SOLICITUDES (HISTORIAL COMPLETO) ────────────────── */}
-            {activeTab === 'solicitudes' && (
+            {(activeTab === 'solicitudes' || activeTab === 'listo') && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
                 {/* List y filtros (2/3 width) */}
                 <div className="lg:col-span-2 space-y-4">
@@ -1068,11 +1286,21 @@ export default function AdminPage() {
                           value={filtroSolicitudEstado}
                           onChange={e => setFiltroSolicitudEstado(e.target.value as EstadoSolicitud | 'TODAS')}
                         >
-                          <option value="TODAS">Todos los Estados</option>
-                          <option value="PENDIENTE">PENDIENTE</option>
-                          <option value="APROBADA">APROBADA</option>
-                          <option value="RECHAZADA">RECHAZADA</option>
-                          <option value="ENTREGADA">ENTREGADA</option>
+                          {activeTab === 'solicitudes' ? (
+                            <>
+                              <option value="TODAS">Todos los Estados</option>
+                              <option value="PENDIENTE">PENDIENTE</option>
+                              <option value="APROBADA">APROBADA</option>
+                              <option value="ENTREGADA">ENTREGADA</option>
+                              <option value="DEVUELTA_INCOMPLETA">DEVUELTA INCOMPLETA</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="TODAS">Todos (Listo/Historial)</option>
+                              <option value="DEVUELTA">DEVUELTA</option>
+                              <option value="RECHAZADA">RECHAZADA</option>
+                            </>
+                          )}
                         </select>
                       </div>
 
@@ -1094,46 +1322,55 @@ export default function AdminPage() {
 
                   {/* Listado */}
                   <div className="card p-5">
-                    {filteredSolicitudes.length === 0 ? (
+                    {paginatedSolicitudes.length === 0 ? (
                       <div className="text-center py-10 text-gray-500">
                         No se encontraron solicitudes con los filtros aplicados
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        {filteredSolicitudes.map(sol => (
-                          <div
-                            key={sol.id}
-                            onClick={() => setSelectedSolicitud(sol)}
-                            className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all border"
-                            style={{ 
-                              background: selectedSolicitud?.id === sol.id ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
-                              borderColor: selectedSolicitud?.id === sol.id ? 'var(--nacap-red)' : 'var(--border)'
-                            }}
-                          >
-                            <div className="min-w-0">
-                              <p className="font-bold text-sm text-white truncate">{sol.alumno}</p>
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mt-1">
-                                <span>RUT: <strong className="text-gray-300 font-medium">{sol.rut}</strong></span>
-                                <span>Jornada: <strong className="text-gray-300 font-medium">{getJornadaLabel(sol.jornada)}</strong></span>
-                                <span className="truncate">Asignatura: <strong className="text-gray-300 font-medium">{sol.asignatura.split(' ')[0]}</strong></span>
+                      <>
+                        <div className="space-y-2">
+                          {paginatedSolicitudes.map(sol => (
+                            <div
+                              key={sol.id}
+                              onClick={() => setSelectedSolicitud(sol)}
+                              className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all border"
+                              style={{ 
+                                background: selectedSolicitud?.id === sol.id ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
+                                borderColor: selectedSolicitud?.id === sol.id ? 'var(--nacap-red)' : 'var(--border)'
+                              }}
+                            >
+                              <div className="min-w-0">
+                                <p className="font-bold text-sm text-white truncate">{sol.alumno}</p>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mt-1">
+                                  <span>RUT: <strong className="text-gray-300 font-medium">{sol.rut}</strong></span>
+                                  <span>Jornada: <strong className="text-gray-300 font-medium">{getJornadaLabel(sol.jornada)}</strong></span>
+                                  <span className="truncate">Asignatura: <strong className="text-gray-300 font-medium">{(sol.asignatura || '').split(' ')[0]}</strong></span>
+                                </div>
+                              </div>
+
+                              <div className="flex sm:flex-col items-end gap-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-white/5 pt-2 sm:pt-0">
+                                <span className={`badge ${
+                                  sol.estado === 'PENDIENTE' ? 'badge-pending' :
+                                  sol.estado === 'APROBADA' ? 'badge-approved' :
+                                  sol.estado === 'DEVUELTA' ? 'badge-approved' :
+                                  sol.estado === 'RECHAZADA' ? 'badge-rejected' :
+                                  sol.estado === 'DEVUELTA_INCOMPLETA' ? 'badge-pending' : 'badge-delivered'
+                                }`}>
+                                  {sol.estado}
+                                </span>
+                                <span className="text-[10px] text-gray-500">
+                                  {formatFechaHora(sol.created_at)}
+                                </span>
                               </div>
                             </div>
-
-                            <div className="flex sm:flex-col items-end gap-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-white/5 pt-2 sm:pt-0">
-                              <span className={`badge ${
-                                sol.estado === 'PENDIENTE' ? 'badge-pending' :
-                                sol.estado === 'APROBADA' ? 'badge-approved' :
-                                sol.estado === 'RECHAZADA' ? 'badge-rejected' : 'badge-delivered'
-                              }`}>
-                                {sol.estado}
-                              </span>
-                              <span className="text-[10px] text-gray-500">
-                                {formatFechaHora(sol.created_at)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                        <Pagination
+                          currentPage={activeTab === 'listo' ? pageSolicitudesListo : pageSolicitudesActivas}
+                          totalPages={Math.ceil(filteredSolicitudes.length / itemsPerPage)}
+                          onPageChange={activeTab === 'listo' ? setPageSolicitudesListo : setPageSolicitudesActivas}
+                        />
+                      </>
                     )}
                   </div>
                 </div>
@@ -1287,7 +1524,8 @@ export default function AdminPage() {
 
             {/* ─── PESTAÑA: DIAGNÓSTICO DE BASE DE DATOS ────────────────────── */}
             {activeTab === 'diagnostico' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
                 
                 {/* Loaded Counts */}
                 <div className="card p-5 space-y-4">
@@ -1340,21 +1578,10 @@ export default function AdminPage() {
                 {/* Technical reference */}
                 <div className="card p-5 space-y-4">
                   <h3 className="font-extrabold text-sm uppercase tracking-wider text-red-500 border-b border-white/5 pb-2 flex items-center gap-2">
-                    <ShieldAlert size={16} /> Credenciales y Configuración de Seguridad
+                    <ShieldAlert size={16} /> Seguridad y Acceso
                   </h3>
 
                   <div className="space-y-4 text-xs">
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-red-950/20 to-red-900/10 border border-red-500/10 relative overflow-hidden">
-                      <p className="text-[9px] font-bold text-red-400 uppercase tracking-widest">Credencial Alumnos</p>
-                      <p className="text-sm font-extrabold mt-1 text-white">Clave Temporal de Acceso:</p>
-                      <code className="text-xs bg-black/30 border border-white/5 px-2 py-1 rounded font-mono font-bold text-red-300 inline-block mt-2">
-                        AlumnoInacap2026!
-                      </code>
-                      <p className="text-[10px] text-gray-400 mt-2">
-                        Todos los alumnos cargados masivamente desde planillas Excel tienen asignada esta clave por defecto.
-                      </p>
-                    </div>
-
                     <div className="space-y-2 text-gray-300">
                       <p className="font-bold text-white uppercase text-[10px] tracking-wide">Esquema RLS (Row Level Security)</p>
                       <p className="text-xs leading-relaxed text-gray-400">
@@ -1370,8 +1597,258 @@ export default function AdminPage() {
                 </div>
 
               </div>
-            )}
 
+              {/* Alertas de correos fallidos */}
+              <div className="card p-5 space-y-4 mt-6 animate-fade-in">
+                <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                  <h3 className="font-extrabold text-sm uppercase tracking-wider text-red-500 flex items-center gap-2">
+                    <AlertTriangle className="text-red-500 animate-pulse" size={16} /> Alertas de Comunicación: Correos Fallidos
+                  </h3>
+                  {correosFallidos.length > 0 && (
+                    <button
+                      onClick={handleLimpiarCorreosFallidos}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/20 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Trash2 size={12} /> Limpiar Historial
+                    </button>
+                  )}
+                </div>
+
+                {correosFallidos.length === 0 ? (
+                  <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20 flex items-start gap-3">
+                    <CheckCircle2 className="text-green-500 flex-shrink-0 mt-0.5" size={16} />
+                    <div>
+                      <p className="font-bold text-xs text-green-400">Todo en orden</p>
+                      <p className="text-[11px] text-gray-400">No se registran fallos en los envíos de correo. El sistema funciona correctamente con Brevo (Primario) y Resend (Fallback).</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                      ⚠️ <strong>Atención:</strong> Se han detectado {correosFallidos.length} intentos de correo fallidos en los que tanto Brevo como Resend no respondieron. Verifica las llaves API en <code className="text-white bg-black/40 px-1 rounded">.env.local</code>.
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="nacap-table w-full text-left text-[11px]">
+                        <thead>
+                          <tr className="border-b border-white/10 text-gray-400">
+                            <th className="py-2 px-3 font-semibold">Fecha / Hora</th>
+                            <th className="py-2 px-3 font-semibold">Destinatario</th>
+                            <th className="py-2 px-3 font-semibold">Asunto</th>
+                            <th className="py-2 px-3 font-semibold">Error Brevo</th>
+                            <th className="py-2 px-3 font-semibold">Error Resend</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {correosFallidos.map((log: any) => (
+                            <tr key={log.id} className="border-b border-white/5 hover:bg-white/2">
+                              <td className="py-2.5 px-3 text-gray-400 whitespace-nowrap">
+                                {formatFechaHora(log.fecha)}
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-white">
+                                {log.destinatario_nombre} <br />
+                                <span className="font-normal text-[10px] text-gray-400">{log.destinatario}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-gray-300 max-w-[200px] truncate" title={log.asunto}>
+                                {log.asunto}
+                              </td>
+                              <td className="py-2.5 px-3 text-red-400 font-mono text-[10px] max-w-[200px] break-words">
+                                {log.error_brevo || '—'}
+                              </td>
+                              <td className="py-2.5 px-3 text-red-400 font-mono text-[10px] max-w-[200px] break-words">
+                                {log.error_resend || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          </div>
+        )}
+
+        {/* Modal Alumno Form (Add / Edit) */}
+        {showAlumnoModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="card w-full max-w-md p-6 space-y-4 border border-white/10 shadow-2xl relative">
+              <button
+                type="button"
+                onClick={cancelAlumnoForm}
+                className="absolute right-4 top-4 p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+              
+              <h3 className="font-extrabold text-sm uppercase tracking-wider text-red-500 border-b border-white/5 pb-2">
+                {editingAlumno ? 'Editar Perfil del Estudiante' : 'Registrar Nuevo Estudiante'}
+              </h3>
+
+              <form onSubmit={handleSaveAlumno} className="space-y-4 text-xs">
+                <div>
+                  <label className="label">Nombre Completo</label>
+                  <input
+                    required
+                    type="text"
+                    className="input-field"
+                    placeholder="Diego Henríquez Gonzales"
+                    value={alumnoForm.nombre}
+                    onChange={e => setAlumnoForm(p => ({ ...p, nombre: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Email Institucional</label>
+                  <input
+                    required
+                    type="email"
+                    className="input-field"
+                    placeholder="diego.henriquez@inacapmail.cl"
+                    value={alumnoForm.email}
+                    onChange={e => setAlumnoForm(p => ({ ...p, email: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">RUT</label>
+                    <input
+                      required
+                      type="text"
+                      className="input-field"
+                      placeholder="12.345.678-9"
+                      value={alumnoForm.rut}
+                      onChange={e => setAlumnoForm(p => ({ ...p, rut: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Sección / Curso</label>
+                    <input
+                      required
+                      type="text"
+                      className="input-field"
+                      placeholder="A01 o M03"
+                      value={alumnoForm.seccion}
+                      onChange={e => setAlumnoForm(p => ({ ...p, seccion: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Jornada de Clases</label>
+                  <select
+                    className="input-field"
+                    value={alumnoForm.jornada}
+                    onChange={e => setAlumnoForm(p => ({ ...p, jornada: e.target.value as 'D' | 'V' }))}
+                  >
+                    <option value="D">Diurna (D)</option>
+                    <option value="V">Vespertina (V)</option>
+                  </select>
+                </div>
+
+                {!editingAlumno && (
+                  <div className="p-3 rounded-lg bg-red-950/20 border border-red-500/10 flex items-start gap-2">
+                    <Info size={14} className="text-red-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-[10px] text-gray-400 leading-normal">
+                      La cuenta se creará automáticamente en Supabase Auth con la contraseña por defecto: <code className="text-red-300 font-mono font-bold">AlumnoInacap2026!</code>
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2 justify-end border-t border-white/5 pt-4">
+                  <button
+                    type="submit"
+                    disabled={savingAlumno}
+                    className="btn-success !py-2 !px-4"
+                  >
+                    {savingAlumno ? 'Guardando...' : 'Guardar Cambios'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelAlumnoForm}
+                    className="btn-secondary !py-2 !px-4"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Ver Alumno */}
+        {verAlumno && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="card w-full max-w-md p-6 space-y-4 border border-white/10 shadow-2xl relative text-xs">
+              <button
+                type="button"
+                onClick={() => setVerAlumno(null)}
+                className="absolute right-4 top-4 p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center text-sm font-black uppercase text-red-500">
+                  {verAlumno.nombre.charAt(0)}
+                </div>
+                <div>
+                  <p className="text-[9px] font-extrabold tracking-widest text-red-500 uppercase">Detalle del Estudiante</p>
+                  <h3 className="font-black text-base text-white mt-0.5">{verAlumno.nombre}</h3>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="flex justify-between py-1.5 border-b border-white/3">
+                  <span className="text-gray-400 font-bold">RUT:</span>
+                  <span className="font-semibold text-white font-mono">{verAlumno.rut || '—'}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-white/3">
+                  <span className="text-gray-400 font-bold">Email Institucional:</span>
+                  <span className="font-semibold text-white">{verAlumno.email}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-white/3">
+                  <span className="text-gray-400 font-bold">Sección / Curso:</span>
+                  <span className="font-semibold text-white font-bold">{verAlumno.seccion || '—'}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-white/3">
+                  <span className="text-gray-400 font-bold">Jornada:</span>
+                  <span className="font-semibold text-white">{getJornadaLabel(verAlumno.jornada)}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-white/3">
+                  <span className="text-gray-400 font-bold">ID Único (Auth):</span>
+                  <span className="font-mono text-[10px] text-gray-400 truncate max-w-[200px]" title={verAlumno.id}>{verAlumno.id}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-white/3">
+                  <span className="text-gray-400 font-bold">Creado el:</span>
+                  <span className="font-semibold text-white">{verAlumno.created_at ? new Date(verAlumno.created_at).toLocaleString() : '—'}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end border-t border-white/5 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerAlumno(null)
+                    startEditAlumno(verAlumno)
+                  }}
+                  className="btn-success !py-2 !px-4"
+                >
+                  Editar Datos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVerAlumno(null)}
+                  className="btn-secondary !py-2 !px-4"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

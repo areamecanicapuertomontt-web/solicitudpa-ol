@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabaseClient } from '@/lib/supabase-client'
+import { supabaseBrowser } from '@/lib/supabase-browser'
 import { ClipboardList, Settings, LogIn, LogOut, LayoutDashboard, User } from 'lucide-react'
 import Link from 'next/link'
 
@@ -13,24 +13,34 @@ export default function HomeAuthButtons() {
 
   useEffect(() => {
     async function getSession() {
-      const { data: { user } } = await supabaseClient.auth.getUser()
-      if (user) {
-        const { data: perf } = await supabaseClient
-          .from('perfiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        if (perf) {
-          setProfile(perf)
+      try {
+        // Limit session fetch to 3 seconds to avoid infinite loading on offline local devices
+        const userPromise = supabaseBrowser.auth.getUser()
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 3000)
+        )
+        const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
+        if (user) {
+          const { data: perf } = await supabaseBrowser
+            .from('perfiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+          if (perf) {
+            setProfile(perf)
+          }
         }
+      } catch (err) {
+        console.error('Error fetching session in HomeAuthButtons:', err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     getSession()
   }, [])
 
   async function handleLogout() {
-    await supabaseClient.auth.signOut()
+    await supabaseBrowser.auth.signOut()
     setProfile(null)
     window.location.href = '/login'
   }

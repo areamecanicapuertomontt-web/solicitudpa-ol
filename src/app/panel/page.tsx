@@ -6,11 +6,94 @@ import { useRouter } from 'next/navigation'
 import {
   Package, Clock, CheckCircle2, XCircle, Truck,
   RefreshCw, Search, Settings, ChevronRight,
-  User, BookOpen, Hash, Calendar, KeyRound, X, Wifi, LogOut
+  User, BookOpen, Hash, Calendar, KeyRound, X, Wifi, LogOut,
+  AlertCircle, Loader2
 } from 'lucide-react'
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { Solicitud, EstadoSolicitud } from '@/lib/types'
+
+function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange
+}: {
+  currentPage: number
+  totalPages: number
+  onPageChange: (p: number) => void
+}) {
+  if (totalPages <= 1) return null
+
+  const range = []
+  const maxPagesToShow = 5
+  let start = Math.max(1, currentPage - 2)
+  let end = Math.min(totalPages, start + maxPagesToShow - 1)
+
+  if (end - start < maxPagesToShow - 1) {
+    start = Math.max(1, end - maxPagesToShow + 1)
+  }
+
+  for (let i = start; i <= end; i++) {
+    range.push(i)
+  }
+
+  return (
+    <div className="flex items-center justify-between border-t border-white/5 pt-4 mt-4 select-none">
+      <p className="text-xs text-gray-400">
+        Página <span className="text-white font-bold">{currentPage}</span> de <span className="text-white font-bold">{totalPages}</span>
+      </p>
+      <div className="flex items-center gap-1.5 font-medium">
+        <button
+          type="button"
+          disabled={currentPage === 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="btn-secondary !px-2.5 !py-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+        >
+          Anterior
+        </button>
+        
+        {start > 1 && (
+          <>
+            <button type="button" onClick={() => onPageChange(1)} className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${currentPage === 1 ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}>1</button>
+            {start > 2 && <span className="text-gray-600 text-xs px-1">...</span>}
+          </>
+        )}
+
+        {range.map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onPageChange(p)}
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+              currentPage === p 
+                ? 'bg-red-600 text-white' 
+                : 'hover:bg-white/5 text-gray-400 hover:text-white'
+            }`}
+            style={currentPage === p ? { background: 'var(--nacap-red)' } : {}}
+          >
+            {p}
+          </button>
+        ))}
+
+        {end < totalPages && (
+          <>
+            {end < totalPages - 1 && <span className="text-gray-600 text-xs px-1">...</span>}
+            <button type="button" onClick={() => onPageChange(totalPages)} className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${currentPage === totalPages ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}>{totalPages}</button>
+          </>
+        )}
+
+        <button
+          type="button"
+          disabled={currentPage === totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="btn-secondary !px-2.5 !py-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  )
+}
 
 
 const ESTADOS: { value: EstadoSolicitud | 'TODAS'; label: string }[] = [
@@ -18,6 +101,7 @@ const ESTADOS: { value: EstadoSolicitud | 'TODAS'; label: string }[] = [
   { value: 'PENDIENTE', label: 'Pendientes' },
   { value: 'APROBADA',  label: 'Aprobadas' },
   { value: 'ENTREGADA', label: 'Entregadas' },
+  { value: 'DEVUELTA',  label: 'Devueltas' },
   { value: 'RECHAZADA', label: 'Rechazadas' },
 ]
 
@@ -27,6 +111,8 @@ function BadgeEstado({ estado }: { estado: string }) {
     APROBADA:  { label: 'Aprobada',  cls: 'badge-approved',  icon: <CheckCircle2 size={11} /> },
     RECHAZADA: { label: 'Rechazada', cls: 'badge-rejected',  icon: <XCircle size={11} /> },
     ENTREGADA: { label: 'Entregada', cls: 'badge-delivered', icon: <Truck size={11} /> },
+    DEVUELTA:  { label: 'Devuelta',  cls: 'badge-approved',  icon: <CheckCircle2 size={11} /> },
+    DEVUELTA_INCOMPLETA: { label: 'Falta Material ⚠️', cls: 'badge-pending', icon: <Clock size={11} /> },
   }
   const cfg = map[estado] || { label: estado, cls: 'badge', icon: null }
   return <span className={cfg.cls}>{cfg.icon}{cfg.label}</span>
@@ -172,6 +258,21 @@ export default function PanelPage() {
   const [isLive, setIsLive] = useState(false)
   const [profile, setProfile] = useState<any>(null)
 
+  // ── Pagination States ──
+  const itemsPerPage = 10
+  const [page, setPage] = useState(1)
+
+  // Reset page and selection when search or filters change
+  useEffect(() => {
+    setPage(1)
+    setSelectedId(null)
+  }, [busqueda, filtro])
+
+  // ── Devolution Checklist States ──
+  const [returnCheck, setReturnCheck] = useState<{ [itemId: string]: boolean }>({})
+  const [submittingReturn, setSubmittingReturn] = useState(false)
+  const [devolucionError, setDevolucionError] = useState<string | null>(null)
+
   useEffect(() => {
     async function loadProfile() {
       const { data: { user } } = await supabaseBrowser.auth.getUser()
@@ -214,9 +315,7 @@ export default function PanelPage() {
   const fetchSolicitudes = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (filtro !== 'TODAS') params.set('estado', filtro)
-      const res = await fetch(`/api/panel?${params}`)
+      const res = await fetch(`/api/panel`)
       const data = await res.json()
       setSolicitudes(data.solicitudes || [])
     } catch {
@@ -224,7 +323,7 @@ export default function PanelPage() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [filtro])
+  }, [])
 
   useEffect(() => { fetchSolicitudes() }, [fetchSolicitudes])
 
@@ -252,18 +351,94 @@ export default function PanelPage() {
     return () => clearInterval(interval)
   }, [fetchSolicitudes])
 
-  const filtradas = solicitudes.filter(s =>
-    s.alumno.toLowerCase().includes(busqueda.toLowerCase()) ||
-    s.rut.toLowerCase().includes(busqueda.toLowerCase()) ||
-    s.asignatura.toLowerCase().includes(busqueda.toLowerCase())
-  )
+  const filtradas = solicitudes.filter(s => {
+    // 1. Filter by status tab selection
+    if (filtro !== 'TODAS') {
+      if (filtro === 'ENTREGADA') {
+        // "Entregadas" includes both active entregas and partial returns
+        if (s.estado !== 'ENTREGADA' && s.estado !== 'DEVUELTA_INCOMPLETA') return false
+      } else {
+        if (s.estado !== filtro) return false
+      }
+    } else {
+      // Under "Todas", exclude fully completed requests (DEVUELTA) so they don't clutter the active queue
+      if (s.estado === 'DEVUELTA') return false
+    }
+
+    // 2. Search query filter
+    const q = busqueda.trim().toLowerCase()
+    return !q ||
+      s.alumno.toLowerCase().includes(q) ||
+      s.rut.toLowerCase().includes(q) ||
+      s.asignatura.toLowerCase().includes(q)
+  })
+
+  const paginatedFiltradas = filtradas.slice((page - 1) * itemsPerPage, page * itemsPerPage)
 
   const selected = solicitudes.find(s => s.id === selectedId)
+
+  // Populate return check state
+  useEffect(() => {
+    if (selected && selected.items) {
+      const initial: { [itemId: string]: boolean } = {}
+      selected.items.forEach(item => {
+        if (item.id) {
+          initial[item.id] = !!item.devuelto
+        }
+      })
+      setReturnCheck(initial)
+      setDevolucionError(null)
+    } else {
+      setReturnCheck({})
+      setDevolucionError(null)
+    }
+  }, [selectedId, selected?.estado])
+
+  async function handleRegistrarDevolucion() {
+    if (!selected) return
+    setSubmittingReturn(true)
+    setDevolucionError(null)
+    try {
+      const { data: { session } } = await supabaseBrowser.auth.getSession()
+      if (!session) {
+        setDevolucionError('Sesión expirada. Por favor inicia sesión nuevamente.')
+        return
+      }
+
+      const itemsPayload = Object.entries(returnCheck).map(([id, devuelto]) => ({
+        id,
+        devuelto
+      }))
+
+      const res = await fetch(`/api/panel/${selected.id}/devolver`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ items: itemsPayload })
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        setDevolucionError(json.error || 'Error al registrar la devolución')
+        return
+      }
+
+      setSelectedId(null)
+      fetchSolicitudes(true)
+    } catch (err: any) {
+      setDevolucionError('Error de conexión o del servidor')
+    } finally {
+      setSubmittingReturn(false)
+    }
+  }
 
   const stats = {
     pendientes: solicitudes.filter(s => s.estado === 'PENDIENTE').length,
     aprobadas:  solicitudes.filter(s => s.estado === 'APROBADA').length,
-    entregadas: solicitudes.filter(s => s.estado === 'ENTREGADA').length,
+    entregadas: solicitudes.filter(s => s.estado === 'ENTREGADA' || s.estado === 'DEVUELTA_INCOMPLETA').length,
+    devueltas:  solicitudes.filter(s => s.estado === 'DEVUELTA').length,
   }
 
   return (
@@ -362,11 +537,12 @@ export default function PanelPage() {
         )}
 
         {/* ── Stats ── */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
             { label: 'Pendientes', value: stats.pendientes, color: '#F59E0B', icon: <Clock size={18} /> },
             { label: 'Aprobadas',  value: stats.aprobadas,  color: '#22C55E', icon: <CheckCircle2 size={18} /> },
             { label: 'Entregadas', value: stats.entregadas, color: '#60A5FA', icon: <Truck size={18} /> },
+            { label: 'Devueltas',  value: stats.devueltas,  color: '#A855F7', icon: <CheckCircle2 size={18} /> },
           ].map(stat => (
             <div key={stat.label} className="card p-4 animate-fade-in">
               <div className="flex items-center gap-2 mb-1" style={{ color: stat.color }}>
@@ -419,84 +595,103 @@ export default function PanelPage() {
                 <Package size={36} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
                 <p style={{ color: 'var(--text-secondary)' }}>No hay solicitudes</p>
               </div>
-            ) : filtradas.map(sol => (
-              <div
-                key={sol.id}
-                onClick={() => setSelectedId(sol.id === selectedId ? null : sol.id)}
-                className="card p-4 cursor-pointer transition-all duration-200 hover:scale-[1.01]"
-                style={selectedId === sol.id
-                  ? { outline: '2px solid var(--nacap-red)', outlineOffset: '0px' }
-                  : {}}
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <User size={13} style={{ color: 'var(--text-muted)' }} />
-                      <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>
-                        {sol.alumno}
-                      </p>
+            ) : (
+              <>
+                {paginatedFiltradas.map(sol => (
+                  <div
+                    key={sol.id}
+                    onClick={() => setSelectedId(sol.id === selectedId ? null : sol.id)}
+                    className="card p-4 cursor-pointer transition-all duration-200 hover:scale-[1.01]"
+                    style={selectedId === sol.id
+                      ? { outline: '2px solid var(--nacap-red)', outlineOffset: '0px' }
+                      : {}}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <User size={13} style={{ color: 'var(--text-muted)' }} />
+                          <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>
+                            {sol.alumno}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <Hash size={12} style={{ color: 'var(--text-muted)' }} />
+                          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{sol.rut}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <BookOpen size={12} style={{ color: 'var(--text-muted)' }} />
+                          <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
+                            {sol.asignatura} — {sol.seccion} ({getJornadaLabel(sol.jornada)})
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <BadgeEstado estado={sol.estado} />
+                        <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <Hash size={12} style={{ color: 'var(--text-muted)' }} />
-                      <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{sol.rut}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <BookOpen size={12} style={{ color: 'var(--text-muted)' }} />
-                      <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
-                        {sol.asignatura} — {sol.seccion} ({getJornadaLabel(sol.jornada)})
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <BadgeEstado estado={sol.estado} />
-                    <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
-                  </div>
-                </div>
 
-                {/* Items preview */}
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {(sol.items || []).slice(0, 3).map((item, i) => (
-                    <span key={i} className="text-xs px-2 py-0.5 rounded-full"
-                      style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
-                      {item.cantidad}× {item.descripcion}
-                    </span>
-                  ))}
-                  {(sol.items?.length || 0) > 3 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full"
-                      style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
-                      +{(sol.items?.length || 0) - 3} más
-                    </span>
-                  )}
-                </div>
+                    {/* Items preview */}
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {(sol.items || []).slice(0, 3).map((item, i) => (
+                        <span key={i} className="text-xs px-2 py-0.5 rounded-full"
+                          style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
+                          {item.cantidad}× {item.descripcion}
+                        </span>
+                      ))}
+                      {(sol.items?.length || 0) > 3 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full"
+                          style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
+                          +{(sol.items?.length || 0) - 3} más
+                        </span>
+                      )}
+                    </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <Calendar size={11} style={{ color: 'var(--text-muted)' }} />
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {formatFechaHora(sol.created_at)}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <Calendar size={11} style={{ color: 'var(--text-muted)' }} />
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {formatFechaHora(sol.created_at)}
+                        </p>
+                      </div>
+                      {sol.estado === 'APROBADA' && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setModalSolicitud(sol) }}
+                          className="btn-success !px-3 !py-1.5 !text-xs"
+                        >
+                          <KeyRound size={12} />
+                          Ingresar código
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {sol.estado === 'APROBADA' && (
-                    <button
-                      onClick={e => { e.stopPropagation(); setModalSolicitud(sol) }}
-                      className="btn-success !px-3 !py-1.5 !text-xs"
-                    >
-                      <KeyRound size={12} />
-                      Ingresar código
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+                ))}
+                <Pagination
+                  currentPage={page}
+                  totalPages={Math.ceil(filtradas.length / itemsPerPage)}
+                  onPageChange={setPage}
+                />
+              </>
+            )}
           </div>
 
           {/* Detalle */}
           {selected && (
             <div className="card p-5 animate-fade-in lg:sticky lg:top-24 lg:self-start">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-black text-lg" style={{ color: 'var(--text-primary)' }}>
-                  Detalle
-                </h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(null)}
+                    className="p-1 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-all"
+                    title="Cerrar detalle"
+                  >
+                    <X size={16} />
+                  </button>
+                  <h2 className="font-black text-lg" style={{ color: 'var(--text-primary)' }}>
+                    Detalle
+                  </h2>
+                </div>
                 <BadgeEstado estado={selected.estado} />
               </div>
 
@@ -537,10 +732,15 @@ export default function PanelPage() {
                           style={{ color: 'var(--nacap-red)' }}>{item.cantidad}</td>
                         <td className="font-medium">{item.descripcion}</td>
                         <td>
-                          <span className="text-xs px-2 py-0.5 rounded-full"
+                          <span className="text-xs px-2 py-0.5 rounded-full mr-1.5"
                             style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
                             {item.estado_item}
                           </span>
+                          {item.devuelto && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                              ✓ Devuelto
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -556,6 +756,96 @@ export default function PanelPage() {
                   <KeyRound size={16} />
                   Ingresar Código y Entregar
                 </button>
+              )}
+
+              {(selected.estado === 'ENTREGADA' || selected.estado === 'DEVUELTA_INCOMPLETA') && (
+                <div className="mt-5 pt-5 border-t border-white/10 text-xs">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--nacap-red)' }}>
+                      Control de Devolución
+                    </h3>
+                    <span className="text-[10px] text-gray-400">Marcar artículos devueltos</span>
+                  </div>
+                  
+                  <div className="space-y-2 mb-4">
+                    {(selected.items || []).map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          if (item.id && !item.devuelto) {
+                            setReturnCheck(prev => ({ ...prev, [item.id!]: !prev[item.id!] }))
+                          }
+                        }}
+                        className={`flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-white/5 transition-all duration-150 border ${item.devuelto ? 'pointer-events-none opacity-60' : ''}`}
+                        style={{
+                          background: returnCheck[item.id || ''] ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.02)',
+                          borderColor: returnCheck[item.id || ''] ? 'rgba(34,197,94,0.2)' : 'var(--border)'
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={!!returnCheck[item.id || ''] || !!item.devuelto}
+                            disabled={!!item.devuelto}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (item.id) {
+                                setReturnCheck(prev => ({ ...prev, [item.id!]: e.target.checked }))
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 accent-red-600 cursor-pointer"
+                          />
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{item.descripcion}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cantidad: {item.cantidad}</p>
+                          </div>
+                        </div>
+                        {item.devuelto ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-green-500/10 text-green-400 border border-green-500/20">
+                            Devuelto
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
+                            Pendiente
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {devolucionError && (
+                    <div className="p-3 mb-4 rounded-xl flex items-center gap-2 text-xs"
+                      style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444' }}>
+                      <AlertCircle size={14} />
+                      <span>{devolucionError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleRegistrarDevolucion}
+                    disabled={submittingReturn}
+                    className="btn-primary w-full py-3 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {submittingReturn ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Procesando Devolución...
+                      </>
+                    ) : (
+                      <>Confirmar Devolución</>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {selected.estado === 'DEVUELTA' && (
+                <div className="mt-5 pt-5 border-t border-white/10 text-center p-4 rounded-xl"
+                  style={{ background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.1)' }}>
+                  <CheckCircle2 size={32} className="mx-auto mb-2 text-green-500" />
+                  <p className="text-sm font-bold text-white">Devolución Completada</p>
+                  <p className="text-xs text-gray-400 mt-1">Todos los materiales han sido devueltos en su totalidad.</p>
+                </div>
               )}
             </div>
           )}

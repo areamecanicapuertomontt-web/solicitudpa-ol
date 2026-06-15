@@ -1,12 +1,36 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, ChevronLeft, Send, AlertCircle, LogOut } from 'lucide-react'
-import type { Docente, SolicitudFormData } from '@/lib/types'
+import {
+  Plus,
+  Trash2,
+  ChevronLeft,
+  Send,
+  AlertCircle,
+  LogOut,
+  Search,
+  Package,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
+  Wrench,
+  Calendar,
+  User,
+  Activity,
+  Gauge,
+  FileText,
+  Award,
+  CheckCircle,
+  XCircle,
+  BarChart3,
+  Check,
+  HelpCircle
+} from 'lucide-react'
+import type { Docente } from '@/lib/types'
 import { supabaseClient } from '@/lib/supabase-client'
 
 
@@ -36,6 +60,20 @@ export default function SolicitudPage() {
   const [profile, setProfile] = useState<any>(null)
   const [asignaturas, setAsignaturas] = useState<any[]>([])
   const [selectedCarrera, setSelectedCarrera] = useState<string>('ALL')
+  const [activeAutocomplete, setActiveAutocomplete] = useState<number | null>(null)
+  const [autocompleteSearch, setAutocompleteSearch] = useState<Record<number,string>>({})
+  const autocompleteRef = useRef<HTMLDivElement>(null)
+
+  // ─── Catálogo de Equipos para Autocompletar ───
+  const [equiposCatalog, setEquiposCatalog] = useState<{id:string; nombre:string; codigo_inventario:string|null; frecuencia?:string; seccion_nombre:string|null}[]>([])
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [filtroArea, setFiltroArea] = useState<string>('Todos')
+  const [filtroFrecuencia, setFiltroFrecuencia] = useState<string>('Todos')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [addedEquipos, setAddedEquipos] = useState<Record<string, boolean>>({})
+  const [activePanoleros, setActivePanoleros] = useState<any[]>([])
+  const [loadingPanoleros, setLoadingPanoleros] = useState(true)
 
   const { register, control, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -55,6 +93,85 @@ export default function SolicitudPage() {
       .catch(() => setDocentes([]))
   }, [])
 
+
+
+  // Cerrar autocomplete al hacer click fuera
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node)) {
+        setActiveAutocomplete(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Cargar catálogo de equipos del Plan de Mantención para autocompletar
+  useEffect(() => {
+    async function loadEquipos() {
+      const { data } = await supabaseClient
+        .from('equipos')
+        .select('id, nombre, codigo_inventario, frecuencia, secciones_mantencion(nombre)')
+        .eq('activo', true)
+        .order('nombre')
+      if (data) {
+        setEquiposCatalog(data.map((e: any) => ({
+          id: e.id,
+          nombre: e.nombre,
+          codigo_inventario: e.codigo_inventario,
+          frecuencia: e.frecuencia,
+          seccion_nombre: e.secciones_mantencion?.nombre || null
+        })))
+      }
+    }
+    loadEquipos()
+  }, [])
+
+  const handleAddEquipoToSolicitud = (id: string, nombre: string) => {
+    const currentItems = control._formValues.items || []
+    if (currentItems.length === 1 && currentItems[0].descripcion.trim() === '') {
+      setValue('items.0.descripcion', nombre)
+    } else {
+      append({ cantidad: 1, descripcion: nombre, estado_item: 'CUALQUIERA' })
+    }
+    
+    setAddedEquipos(prev => ({ ...prev, [id]: true }))
+    setTimeout(() => {
+      setAddedEquipos(prev => ({ ...prev, [id]: false }))
+    }, 1500)
+  }
+
+  const getAreaFromSeccion = (nombre: string | undefined): string | null => {
+    if (!nombre) return null
+    const n = nombre.toUpperCase()
+    if (n.includes('AUTOMOTRIZ') || n.includes('ELECTROMOVILIDAD') || n.includes('MECÁNICA') || n.includes('MECANICA')) {
+      return 'MECÁNICA Y ELECTROMOVILIDAD AUTOMOTRIZ'
+    }
+    if (n.includes('INDUSTRIAL') || n.includes('MANTENIMIENTO')) {
+      return 'MANTENIMIENTO INDUSTRIAL'
+    }
+    return null
+  }
+
+  const filteredEquipos = useMemo(() => {
+    const q = catalogSearch.trim().toLowerCase()
+    return equiposCatalog.filter(e => {
+      if (q) {
+        const matchNombre = e.nombre.toLowerCase().includes(q)
+        const matchCodigo = e.codigo_inventario?.toLowerCase().includes(q) ?? false
+        if (!matchNombre && !matchCodigo) return false
+      }
+      if (filtroArea !== 'Todos') {
+        const area = getAreaFromSeccion(e.seccion_nombre || '')
+        if (area !== filtroArea) return false
+      }
+      if (filtroFrecuencia !== 'Todos') {
+        if (e.frecuencia !== filtroFrecuencia) return false
+      }
+      return true
+    })
+  }, [equiposCatalog, catalogSearch, filtroArea, filtroFrecuencia])
+
   useEffect(() => {
     async function loadAsignaturas() {
       const { data, error } = await supabaseClient
@@ -70,58 +187,105 @@ export default function SolicitudPage() {
     loadAsignaturas()
   }, [])
 
+  // Cargar pañoleros activos
+  useEffect(() => {
+    async function loadActivePanoleros() {
+      try {
+        const { data, error } = await supabaseClient
+          .from('perfiles')
+          .select('nombre, rol, last_seen')
+          .in('rol', ['PANOL', 'ADMIN'])
+        
+        if (error) {
+          console.warn("Error al cargar perfiles activos (posiblemente falta ejecutar SQL en Supabase):", error.message)
+          setLoadingPanoleros(false)
+          return
+        }
+
+        if (data) {
+          const now = new Date()
+          const active = data.filter((p: any) => {
+            if (!p.last_seen) return false
+            const lastSeenDate = new Date(p.last_seen)
+            const diffMs = now.getTime() - lastSeenDate.getTime()
+            // Considerar activo si reportó en los últimos 90 segundos (90000 ms)
+            // Tolerancia de desfase de reloj cliente-servidor de hasta 30 segundos en el futuro (diffMs >= -30000)
+            return diffMs >= -30000 && diffMs < 90000
+          })
+          setActivePanoleros(active)
+        }
+      } catch (err) {
+        console.error("Error al verificar presencia de pañoleros:", err)
+      } finally {
+        setLoadingPanoleros(false)
+      }
+    }
+
+    loadActivePanoleros()
+    const interval = setInterval(loadActivePanoleros, 20000)
+    return () => clearInterval(interval)
+  }, [])
+
   useEffect(() => {
     async function loadProfile() {
-      const { data: { user } } = await supabaseClient.auth.getUser()
-      if (user) {
-        let perf = null
-        try {
-          const { data } = await supabaseClient
-            .from('perfiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-          perf = data
-        } catch (e) {
-          console.error("Error cargando perfil desde tabla perfiles:", e)
-        }
-
-        // Fallback: Si no existe en la tabla perfiles, usamos metadatos de auth
-        if (!perf) {
-          perf = {
-            id: user.id,
-            email: user.email,
-            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-            rol: user.user_metadata?.rol || 'ALUMNO',
-            rut: user.user_metadata?.rut || '',
-            jornada: user.user_metadata?.jornada || 'D',
-            seccion: user.user_metadata?.seccion || '',
+      try {
+        const userPromise = supabaseClient.auth.getUser()
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 3000)
+        )
+        const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
+        if (user) {
+          let perf = null
+          try {
+            const { data } = await supabaseClient
+              .from('perfiles')
+              .select('*')
+              .eq('id', user.id)
+              .single()
+            perf = data
+          } catch (e) {
+            console.error("Error cargando perfil desde tabla perfiles:", e)
           }
-        }
 
-        setProfile(perf)
-        setValue('alumno', perf.nombre || '')
-        setValue('rut', perf.rut || '')
-        setValue('alumno_email', perf.email || '')
-        if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
-        
-        const seccionVal = perf.seccion || ''
-        const detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
-          ? 'IMI'
-          : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
-          ? 'MI'
-          : 'ALL'
-        
-        setSelectedCarrera(detected)
-        if (detected !== 'ALL') {
-          if (seccionVal.length < 10) {
-            setValue('seccion', seccionVal)
+          // Fallback: Si no existe en la tabla perfiles, usamos metadatos de auth
+          if (!perf) {
+            perf = {
+              id: user.id,
+              email: user.email,
+              nombre: user.user_metadata?.nombre || 'Usuario Inacap',
+              rol: user.user_metadata?.rol || 'ALUMNO',
+              rut: user.user_metadata?.rut || '',
+              jornada: user.user_metadata?.jornada || 'D',
+              seccion: user.user_metadata?.seccion || '',
+            }
+          }
+
+          setProfile(perf)
+          setValue('alumno', perf.nombre || '')
+          setValue('rut', perf.rut || '')
+          setValue('alumno_email', perf.email || '')
+          if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
+          
+          const seccionVal = perf.seccion || ''
+          const detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
+            ? 'IMI'
+            : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
+            ? 'MI'
+            : 'ALL'
+          
+          setSelectedCarrera(detected)
+          if (detected !== 'ALL') {
+            if (seccionVal.length < 10) {
+              setValue('seccion', seccionVal)
+            } else {
+              setValue('seccion', '')
+            }
           } else {
-            setValue('seccion', '')
+            setValue('seccion', seccionVal)
           }
-        } else {
-          setValue('seccion', seccionVal)
         }
+      } catch (err) {
+        console.error("Error loading profile:", err)
       }
     }
     loadProfile()
@@ -202,6 +366,41 @@ export default function SolicitudPage() {
           )}
         </div>
 
+        {/* Indicador de Pañol Activo (Presencia en tiempo real) */}
+        {!loadingPanoleros && (
+          <div className="mb-5 animate-fade-in" style={{ animationDelay: '40ms' }}>
+            {activePanoleros.length > 0 ? (
+              <div className="flex items-center gap-3.5 px-4.5 py-3.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 backdrop-blur-md relative overflow-hidden">
+                {/* Micro-animación de gradiente en el borde */}
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-teal-500/5 opacity-40 pointer-events-none" />
+                <span className="relative flex h-3.5 w-3.5 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+                </span>
+                <div className="flex-1 min-w-0 z-10">
+                  <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest leading-none mb-1">
+                    🟢 Pañol Activo en Aula
+                  </p>
+                  <p className="text-sm font-extrabold text-white leading-tight">
+                    Atendido por: {activePanoleros.map(p => p.nombre.split(' ')[0]).join(', ')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3.5 px-4.5 py-3.5 rounded-2xl border border-amber-500/15 bg-amber-500/[0.02] backdrop-blur-sm relative overflow-hidden">
+                <span className="h-3 w-3 rounded-full bg-amber-500/40 flex-shrink-0"></span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-amber-500/80 uppercase tracking-widest leading-none mb-1">
+                    ⚠️ Sin Personal de Pañol en Línea
+                  </p>
+                  <p className="text-xs text-gray-400 leading-normal">
+                    No se detecta pañolero conectado. Puedes enviar tu solicitud, pero se procesará cuando el pañol abra.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 animate-fade-in" style={{ animationDelay: '80ms' }}>
 
@@ -214,7 +413,7 @@ export default function SolicitudPage() {
               <div>
                 <p className="text-xs font-bold tracking-wider uppercase text-red-400">Identidad Confirmada</p>
                 <h2 className="text-xl font-black mt-1" style={{ color: 'var(--text-primary)' }}>
-                  ¡Hola, {profile.nombre.split(' ')[0]}! 👋
+                  ¡Hola, {(profile.nombre || 'Usuario').split(' ')[0]}! 👋
                 </h2>
                 <p className="text-xs mt-2 text-gray-400">
                   Bienvenido al sistema. Tus datos institucionales se vincularán automáticamente a esta solicitud:
@@ -351,14 +550,103 @@ export default function SolicitudPage() {
                         className="input-field !px-2 text-center"
                       />
                     </div>
-                    {/* Descripción */}
-                    <div className="flex-1">
-                      <label className="label">Descripción</label>
-                      <input
-                        {...register(`items.${idx}.descripcion`)}
-                        className="input-field"
-                        placeholder="Ej: Llave inglesa 12 pulgadas"
-                      />
+                    {/* Descripción con autocompletado del catálogo */}
+                    <div className="flex-1 relative" ref={activeAutocomplete === idx ? autocompleteRef : undefined}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <label className="label !mb-0">Descripción</label>
+                        <div className="group relative cursor-help text-gray-400 hover:text-gray-200">
+                          <HelpCircle size={13} />
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-gray-900 border border-white/10 text-[10px] text-gray-300 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 leading-relaxed text-center">
+                            Escribe lo que necesitas y te sugerirá equipos del catálogo del Plan de Mantención.
+                          </div>
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                          style={{ color: 'var(--text-muted)' }} />
+                        <input
+                          {...register(`items.${idx}.descripcion`)}
+                          className="input-field !pl-8"
+                          placeholder="Ej: Llave inglesa 12 pulgadas"
+                          autoComplete="off"
+                          onChange={e => {
+                            register(`items.${idx}.descripcion`).onChange(e)
+                            setAutocompleteSearch(prev => ({ ...prev, [idx]: e.target.value }))
+                            setActiveAutocomplete(idx)
+                          }}
+                          onFocus={() => {
+                            setActiveAutocomplete(idx)
+                          }}
+                        />
+                      </div>
+                      {/* Dropdown de sugerencias */}
+                      {activeAutocomplete === idx && (() => {
+                        const q = (autocompleteSearch[idx] || '').toLowerCase().trim()
+                        
+                        const equiposMatches = q.length === 0
+                          ? equiposCatalog.slice(0, 5)
+                          : equiposCatalog.filter(e =>
+                              e.nombre.toLowerCase().includes(q) ||
+                              (e.codigo_inventario?.toLowerCase().includes(q) ?? false) ||
+                              (e.seccion_nombre?.toLowerCase().includes(q) ?? false)
+                            ).slice(0, 5)
+
+                        if (equiposMatches.length === 0) return null
+
+                        return (
+                          <div
+                            className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden shadow-2xl border text-left"
+                            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+                          >
+                            {/* Sección Equipos de Mantención */}
+                            {equiposMatches.length > 0 && (
+                              <div>
+                                <div className="px-3 py-1.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)', background: 'rgba(30,136,229,0.04)' }}>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5"
+                                    style={{ color: '#1E88E5' }}>
+                                    <Wrench size={10} /> {q.length === 0 ? 'Equipos Disponibles (Plan)' : 'Equipos Coincidentes'}
+                                  </p>
+                                </div>
+                                {equiposMatches.map(e => (
+                                  <button
+                                    key={`eq-${e.id}`}
+                                    type="button"
+                                    className="w-full text-left px-4 py-2 hover:bg-white/5 transition-colors flex items-center justify-between gap-3 border-b border-white/[0.02]"
+                                    onMouseDown={ev => {
+                                      ev.preventDefault()
+                                      setValue(`items.${idx}.descripcion`, e.nombre)
+                                      setAutocompleteSearch(prev => ({ ...prev, [idx]: e.nombre }))
+                                      setActiveAutocomplete(null)
+                                    }}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold truncate text-white">
+                                        {e.nombre}
+                                      </p>
+                                      {e.seccion_nombre && (
+                                        <p className="text-[10px] text-gray-400">
+                                          {e.seccion_nombre}
+                                        </p>
+                                      )}
+                                    </div>
+                                    {e.codigo_inventario && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                        Inv: {e.codigo_inventario}
+                                      </span>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="px-3 py-1.5 border-t" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.1)' }}>
+                              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                Escribe para buscar en el catálogo o ingresa un nombre libremente
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                     {/* Eliminar */}
                     {fields.length > 1 && (
@@ -391,6 +679,115 @@ export default function SolicitudPage() {
             </div>
             {errors.items?.root && (
               <p className="text-xs mt-2" style={{ color: 'var(--nacap-red)' }}>{errors.items.root.message}</p>
+            )}
+
+            {/* Nota de material libre/manual */}
+            <div className="mt-4 p-3 rounded-xl border border-blue-500/10 bg-blue-500/5 text-[11px] text-gray-400 leading-relaxed text-left">
+              💡 <strong>¿No está el material que quieres?</strong> Escríbelo de forma manual en la descripción y espera la confirmación del pañol y del profesor al aprobar tu solicitud.
+            </div>
+          </div>
+
+          {/* Collapsible Catálogo de Equipos */}
+          <div className="card p-5">
+            <button
+              type="button"
+              onClick={() => setCatalogOpen(!catalogOpen)}
+              className="w-full flex items-center justify-between font-bold text-xs text-left uppercase tracking-wider text-gray-300"
+            >
+              <div className="flex items-center gap-2">
+                <Search size={14} className="text-blue-400" />
+                <span>Ver Catálogo Completo de Equipos ({equiposCatalog.length})</span>
+              </div>
+              {catalogOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            {catalogOpen && (
+              <div className="mt-4 pt-4 border-t border-white/5 space-y-4 animate-fade-in">
+                {/* Search & Filters */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      value={catalogSearch}
+                      onChange={e => setCatalogSearch(e.target.value)}
+                      placeholder="Buscar por nombre o código..."
+                      className="input-field !pl-8 text-xs !py-1.5"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFiltersOpen(!filtersOpen)}
+                    className="btn-secondary !px-2.5 gap-1 flex-shrink-0 text-xs"
+                  >
+                    <SlidersHorizontal size={12} />
+                    <span>Filtros</span>
+                    {filtersOpen ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                  </button>
+                </div>
+
+                {/* Filters Panel */}
+                {filtersOpen && (
+                  <div className="p-3 rounded-xl space-y-2 text-left" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="label text-[9px] !mb-1">Área</label>
+                        <select
+                          value={filtroArea}
+                          onChange={e => setFiltroArea(e.target.value)}
+                          className="input-field !py-1 text-xs select"
+                        >
+                          <option value="Todos">Todos</option>
+                          <option value="MECÁNICA Y ELECTROMOVILIDAD AUTOMOTRIZ">Mecánica</option>
+                          <option value="MANTENIMIENTO INDUSTRIAL">Industrial</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-[9px] !mb-1">Frecuencia</label>
+                        <select
+                          value={filtroFrecuencia}
+                          onChange={e => setFiltroFrecuencia(e.target.value)}
+                          className="input-field !py-1 text-xs select"
+                        >
+                          <option value="Todos">Todos</option>
+                          <option value="ANUAL">Anual</option>
+                          <option value="SEMESTRAL">Semestral</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* List of equipments */}
+                <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1 text-left">
+                  {filteredEquipos.map(e => (
+                    <div
+                      key={`list-eq-${e.id}`}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-white/[0.03] hover:border-blue-500/20 transition-all text-xs text-left"
+                      style={{ background: 'rgba(255,255,255,0.01)' }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-white truncate">{e.nombre}</p>
+                        <p className="text-[10px] text-gray-500 truncate">
+                          {e.seccion_nombre} {e.codigo_inventario ? `· Inv: ${e.codigo_inventario}` : ''}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAddEquipoToSolicitud(e.id, e.nombre)}
+                        className="btn-secondary !px-2.5 !py-1 text-[10px] flex items-center gap-1 hover:!bg-blue-600/20 hover:!text-blue-400"
+                        style={addedEquipos[e.id] ? { borderColor: 'var(--success)', color: 'var(--success)', background: 'rgba(34,197,94,0.1)' } : {}}
+                      >
+                        {addedEquipos[e.id] ? <Check size={10} /> : <Plus size={10} />}
+                        <span>{addedEquipos[e.id] ? 'Agregado' : 'Agregar'}</span>
+                      </button>
+                    </div>
+                  ))}
+                  {filteredEquipos.length === 0 && (
+                    <p className="text-xs text-gray-500 py-4 text-center">No se encontraron equipos</p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 

@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabaseClient } from '@/lib/supabase-client'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Eye, EyeOff, Lock, Mail, AlertCircle, LogIn } from 'lucide-react'
 import Link from 'next/link'
+import { supabaseBrowser } from '@/lib/supabase-browser'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const next = searchParams.get('next')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -20,7 +23,7 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { data, error: signInError } = await supabaseClient.auth.signInWithPassword({
+      const { data, error: signInError } = await supabaseBrowser.auth.signInWithPassword({
         email: email.trim(),
         password,
       })
@@ -38,12 +41,9 @@ export default function LoginPage() {
       const user = data.user
       const rol = user?.user_metadata?.rol || 'ALUMNO'
 
-      // Redirección basada en rol
-      if (rol === 'ALUMNO') {
-        router.push('/solicitud')
-      } else {
-        router.push('/panel')
-      }
+      // Redirección basada en rol o parámetro next
+      const nextUrl = next || (rol === 'ALUMNO' ? '/solicitud' : '/panel')
+      router.push(nextUrl)
       
       // Forzar recarga leve para actualizar el estado del middleware y cookies
       router.refresh()
@@ -179,5 +179,17 @@ export default function LoginPage() {
 
       </div>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="w-10 h-10 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
+      </main>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }

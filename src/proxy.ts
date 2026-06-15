@@ -40,7 +40,8 @@ export async function proxy(request: NextRequest) {
 
   // 1. Si no está logueado y accede a una ruta protegida
   const isProtectedPath = path.startsWith('/panel') || path.startsWith('/admin') || path.startsWith('/solicitud')
-  if (!user && isProtectedPath) {
+  const hasAuthCookie = request.cookies.getAll().some(c => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'))
+  if (!user && isProtectedPath && !hasAuthCookie) {
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
