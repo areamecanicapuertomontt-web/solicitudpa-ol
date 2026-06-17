@@ -18,8 +18,27 @@ export default function OlvidarContrasenaPage() {
     setSuccess(false)
 
     try {
+      const emailTrimmed = email.trim().toLowerCase()
+
+      // Verificar si el correo está registrado en la base de datos
+      const { data: profileExists, error: profileError } = await supabaseClient
+        .from('perfiles')
+        .select('email')
+        .eq('email', emailTrimmed)
+        .maybeSingle()
+
+      if (profileError) {
+        console.error('Error verificando perfil:', profileError)
+      }
+
+      if (!profileExists) {
+        setError('El correo electrónico ingresado no se encuentra registrado en el sistema.')
+        setLoading(false)
+        return
+      }
+
       const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      const { error: resetError } = await supabaseClient.auth.resetPasswordForEmail(email.trim(), {
+      const { error: resetError } = await supabaseClient.auth.resetPasswordForEmail(emailTrimmed, {
         redirectTo: `${siteUrl}/restablecer-contrasena`,
       })
 
