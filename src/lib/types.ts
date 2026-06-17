@@ -104,6 +104,7 @@ export interface Solicitud {
   asignatura: string
   seccion: string
   jornada: Jornada
+  carrera?: string
   fecha: string
   estado: EstadoSolicitud
   docente_id: string
@@ -123,6 +124,7 @@ export interface SolicitudFormData {
   alumno_email: string
   asignatura: string
   seccion: string
+  carrera?: string
   fecha: string
   jornada: Jornada
   docente_id: string

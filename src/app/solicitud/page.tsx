@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -265,24 +266,25 @@ export default function SolicitudPage() {
           setValue('rut', perf.rut || '')
           setValue('alumno_email', perf.email || '')
           if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
-          
+
+          // Carrera: primero desde columna carrera, luego detección por sección (compatibilidad)
+          const carreraFromProfile = perf.carrera || null
           const seccionVal = perf.seccion || ''
-          const detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
-            ? 'IMI'
-            : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
-            ? 'MI'
-            : 'ALL'
-          
-          setSelectedCarrera(detected)
-          if (detected !== 'ALL') {
-            if (seccionVal.length < 10) {
-              setValue('seccion', seccionVal)
-            } else {
-              setValue('seccion', '')
-            }
-          } else {
-            setValue('seccion', seccionVal)
+
+          let detected = carreraFromProfile
+          if (!detected) {
+            // fallback: detectar por nombre de sección
+            detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
+              ? 'IMI'
+              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
+              ? 'MI'
+              : 'ALL'
           }
+
+          setSelectedCarrera(detected || 'ALL')
+
+          // Sección: siempre guardamos el valor de sección (aunque sea largo, o fallback a 'N/A')
+          setValue('seccion', seccionVal || 'N/A')
         }
       } catch (err) {
         console.error("Error loading profile:", err)
@@ -291,9 +293,32 @@ export default function SolicitudPage() {
     loadProfile()
   }, [setValue])
 
+  // Mapa de código a nombre completo de carrera
+  const CARRERA_NOMBRES: Record<string, string> = {
+    MI:  'Ingeniería en Mecánica y Electromovilidad Automotriz',
+    IMI: 'Ingeniería en Mantenimiento Industrial',
+    IMC: 'Ingeniería en Mecatrónica',
+    FME: 'Técnico en Mecánica y Electromovilidad Automotriz',
+    FMI: 'Técnico en Mantenimiento Industrial',
+    FMC: 'Técnico en Mecatrónica',
+    N3:  'Ingeniería Mecánica en Mantenimiento Industrial',
+    F05: 'Electromecánica',
+    FE2: 'Mantenimiento Industrial',
+  }
+
+  // Mapeo de la carrera del alumno al grupo de la asignatura en BD ('MI' o 'IMI')
+  const mapCarreraToAsignaturaGroup = (carreraCode: string): string => {
+    if (!carreraCode) return 'ALL'
+    const code = carreraCode.toUpperCase()
+    if (['MI', 'FME', 'FMC', 'IMC', 'F05'].includes(code)) return 'MI'
+    if (['IMI', 'FMI', 'N3', 'FE2'].includes(code)) return 'IMI'
+    return 'ALL'
+  }
+
   const filteredAsignaturas = asignaturas.filter(a => {
-    if (selectedCarrera === 'ALL') return true
-    return a.carrera === selectedCarrera
+    const targetGroup = mapCarreraToAsignaturaGroup(selectedCarrera)
+    if (targetGroup === 'ALL') return true
+    return a.carrera === targetGroup
   })
 
   async function handleLogout() {
@@ -308,7 +333,10 @@ export default function SolicitudPage() {
       const res = await fetch('/api/solicitudes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          carrera: profile?.carrera || selectedCarrera !== 'ALL' ? selectedCarrera : null,
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Error al enviar la solicitud')
@@ -320,6 +348,7 @@ export default function SolicitudPage() {
   }
 
 
+
   return (
     <main className="min-h-screen py-8 px-4" style={{ background: 'var(--bg-primary)' }}>
       <div className="max-w-xl mx-auto">
@@ -327,9 +356,9 @@ export default function SolicitudPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 animate-fade-in">
           <div className="flex items-center gap-3">
-            <a href="/" className="btn-secondary !px-3 !py-2">
+            <Link href="/" className="btn-secondary !px-3 !py-2">
               <ChevronLeft size={18} />
-            </a>
+            </Link>
             <div className="flex items-center gap-3">
               <div className="w-1 h-10 rounded-full" style={{ background: 'var(--nacap-red)' }} />
               <div>
@@ -421,87 +450,59 @@ export default function SolicitudPage() {
                 <div className="flex flex-wrap gap-x-6 gap-y-2 mt-3 text-xs text-gray-300 font-medium">
                   <div>RUT: <span className="text-white font-bold">{profile.rut || 'N/A'}</span></div>
                   <div>Correo: <span className="text-white font-bold">{profile.email}</span></div>
-                  {profile.jornada && (
-                    <div>Jornada: <span className="text-white font-bold">{profile.jornada === 'D' ? 'Diurna' : 'Vespertina'}</span></div>
+                  {profile.carrera && (
+                    <div>Carrera: <span className="text-white font-bold">{CARRERA_NOMBRES[profile.carrera] || profile.carrera}</span></div>
                   )}
                 </div>
+
               </div>
             </div>
           )}
 
-          {/* Hidden fields to submit student info with form values */}
+          {/* Hidden fields — se envían automáticamente desde el perfil */}
           <input type="hidden" {...register('alumno')} />
           <input type="hidden" {...register('rut')} />
           <input type="hidden" {...register('alumno_email')} />
+          <input type="hidden" {...register('jornada')} />
+          <input type="hidden" {...register('seccion')} />
 
-          {/* ── Datos de la Asignatura ── */}
+          {/* ── Datos de la Solicitud ── */}
           <div className="card p-5">
             <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-secondary)' }}>
-              Asignatura
+              Datos de la Solicitud
             </h2>
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Filtrar por Carrera</label>
-                  <select
-                    value={selectedCarrera}
-                    onChange={(e) => setSelectedCarrera(e.target.value)}
-                    className="input-field"
-                  >
-                    <option value="ALL">Todas las asignaturas</option>
-                    <option value="IMI">Ing. en Mantenimiento Industrial (IMI)</option>
-                    <option value="MI">Ing. en Mecánica y Electromovilidad (MI)</option>
-                  </select>
-                </div>
 
-                <div>
-                  <label className="label">Asignatura</label>
-                  <select
-                    {...register('asignatura')}
-                    className="input-field text-sm"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>— Selecciona tu Asignatura —</option>
-                    {filteredAsignaturas.map(a => (
-                      <option key={`${a.codigo}-${a.carrera}`} value={a.nombre}>
-                        Sem. {a.nivel} — [{a.codigo}] {a.nombre} ({a.carrera})
-                      </option>
-                    ))}
-                    {filteredAsignaturas.length === 0 && (
-                      <option value="" disabled>Cargando asignaturas...</option>
-                    )}
-                  </select>
-                  {errors.asignatura && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.asignatura.message}</p>}
-                </div>
+              {/* Asignatura — ocupa ancho completo */}
+              <div>
+                <label className="label">Asignatura</label>
+                <select
+                  {...register('asignatura')}
+                  className="input-field text-sm"
+                  defaultValue=""
+                >
+                  <option value="" disabled>— Selecciona tu Asignatura —</option>
+                  {filteredAsignaturas.length === 0 && asignaturas.length === 0 && (
+                    <option value="" disabled>Cargando asignaturas...</option>
+                  )}
+                  {filteredAsignaturas.map(a => (
+                    <option key={`${a.codigo}-${a.carrera}`} value={a.nombre}>
+                      Sem. {a.nivel} — [{a.codigo}] {a.nombre}
+                    </option>
+                  ))}
+                </select>
+                {errors.asignatura && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.asignatura.message}</p>}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="label">Sección</label>
-                  <input
-                    {...register('seccion')}
-                    className="input-field"
-                    placeholder="Ej: A01"
-                  />
-                  {errors.seccion && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.seccion.message}</p>}
-                </div>
-                <div>
-                  <label className="label">Jornada</label>
-                  <select {...register('jornada')} className="input-field">
-                    <option value="D">Diurno</option>
-                    <option value="V">Vespertino</option>
-                  </select>
-                  {errors.jornada && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.jornada.message}</p>}
-                </div>
-                <div>
-                  <label className="label">Fecha</label>
-                  <input
-                    {...register('fecha')}
-                    type="date"
-                    className="input-field"
-                  />
-                  {errors.fecha && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.fecha.message}</p>}
-                </div>
+              {/* Fecha y Docente */}
+              <div>
+                <label className="label">Fecha de uso</label>
+                <input
+                  {...register('fecha')}
+                  type="date"
+                  className="input-field"
+                />
+                {errors.fecha && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.fecha.message}</p>}
               </div>
 
               <div>
@@ -516,6 +517,7 @@ export default function SolicitudPage() {
                 </select>
                 {errors.docente_id && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.docente_id.message}</p>}
               </div>
+
             </div>
           </div>
 

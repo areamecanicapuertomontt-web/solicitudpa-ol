@@ -178,6 +178,9 @@ function ModalCodigo({
           <div className="flex items-center gap-2 mb-1">
             <User size={13} style={{ color: 'var(--text-muted)' }} />
             <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{solicitud.alumno}</span>
+            {solicitud.carrera && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--nacap-red)', color: 'white' }}>{solicitud.carrera}</span>
+            )}
           </div>
           <div className="flex items-center gap-2 mb-1">
             <Hash size={13} style={{ color: 'var(--text-muted)' }} />
@@ -613,6 +616,9 @@ export default function PanelPage() {
                           <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>
                             {sol.alumno}
                           </p>
+                          {sol.carrera && (
+                            <span className="text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0" style={{ background: 'rgba(220,38,38,0.2)', color: '#f87171' }}>{sol.carrera}</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mb-0.5">
                           <Hash size={12} style={{ color: 'var(--text-muted)' }} />

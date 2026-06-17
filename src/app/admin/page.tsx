@@ -98,6 +98,18 @@ function Pagination({
 
 type Tab = 'dashboard' | 'docentes' | 'alumnos' | 'solicitudes' | 'listo' | 'diagnostico'
 
+const CARRERA_NOMBRES: Record<string, string> = {
+  MI:  'Ingeniería en Mecánica y Electromovilidad Automotriz',
+  IMI: 'Ingeniería en Mantenimiento Industrial',
+  IMC: 'Ingeniería en Mecatrónica',
+  FME: 'Técnico en Mecánica y Electromovilidad Automotriz',
+  FMI: 'Técnico en Mantenimiento Industrial',
+  FMC: 'Técnico en Mecatrónica',
+  N3:  'Ingeniería Mecánica en Mantenimiento Industrial',
+  F05: 'Electromecánica',
+  FE2: 'Mantenimiento Industrial',
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
@@ -155,6 +167,7 @@ export default function AdminPage() {
     email: '',
     rut: '',
     seccion: '',
+    carrera: '',
     jornada: 'D' as 'D' | 'V'
   })
   const [savingAlumno, setSavingAlumno] = useState(false)
@@ -433,6 +446,7 @@ export default function AdminPage() {
       email: al.email,
       rut: al.rut || '',
       seccion: al.seccion || '',
+      carrera: al.carrera || '',
       jornada: al.jornada || 'D'
     })
     setShowAlumnoModal(true)
@@ -446,13 +460,14 @@ export default function AdminPage() {
       email: '',
       rut: '',
       seccion: '',
+      carrera: '',
       jornada: 'D'
     })
   }
 
   const handleSaveAlumno = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!alumnoForm.nombre || !alumnoForm.email || !alumnoForm.rut || !alumnoForm.seccion || !alumnoForm.jornada) {
+    if (!alumnoForm.nombre || !alumnoForm.email || !alumnoForm.rut || !alumnoForm.carrera || !alumnoForm.jornada) {
       showNotification('err', 'Por favor completa todos los campos')
       return
     }
@@ -592,6 +607,7 @@ export default function AdminPage() {
       (al.nombre.toLowerCase().includes(searchAlumno.toLowerCase()) ||
        al.email.toLowerCase().includes(searchAlumno.toLowerCase()) ||
        (al.rut || '').toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       (al.carrera || '').toLowerCase().includes(searchAlumno.toLowerCase()) ||
        (al.seccion || '').toLowerCase().includes(searchAlumno.toLowerCase()))
     )
   }, [alumnos, searchAlumno])
@@ -602,6 +618,7 @@ export default function AdminPage() {
       (al.nombre.toLowerCase().includes(searchAlumno.toLowerCase()) ||
        al.email.toLowerCase().includes(searchAlumno.toLowerCase()) ||
        (al.rut || '').toLowerCase().includes(searchAlumno.toLowerCase()) ||
+       (al.carrera || '').toLowerCase().includes(searchAlumno.toLowerCase()) ||
        (al.seccion || '').toLowerCase().includes(searchAlumno.toLowerCase()))
     )
   }, [alumnos, searchAlumno])
@@ -1130,7 +1147,7 @@ export default function AdminPage() {
                               <th>Nombre</th>
                               <th>RUT</th>
                               <th>Email</th>
-                              <th>Sección</th>
+                              <th>Carrera</th>
                               <th className="text-right">Acciones</th>
                             </tr>
                           </thead>
@@ -1147,7 +1164,9 @@ export default function AdminPage() {
                                   </td>
                                   <td className="text-gray-300 font-mono">{al.rut || '—'}</td>
                                   <td className="text-gray-400">{al.email}</td>
-                                  <td className="text-gray-400 font-bold">{al.seccion || '—'}</td>
+                                  <td className="text-gray-400 font-bold" title={CARRERA_NOMBRES[al.carrera] || al.carrera || '—'}>
+                                    {al.carrera || al.seccion || '—'}
+                                  </td>
                                   <td className="text-right">
                                     <div className="flex justify-end gap-1">
                                       <button
@@ -1198,7 +1217,7 @@ export default function AdminPage() {
                               <th>Nombre</th>
                               <th>RUT</th>
                               <th>Email</th>
-                              <th>Sección</th>
+                              <th>Carrera</th>
                               <th className="text-right">Acciones</th>
                             </tr>
                           </thead>
@@ -1215,7 +1234,9 @@ export default function AdminPage() {
                                   </td>
                                   <td className="text-gray-300 font-mono">{al.rut || '—'}</td>
                                   <td className="text-gray-400">{al.email}</td>
-                                  <td className="text-gray-400 font-bold">{al.seccion || '—'}</td>
+                                  <td className="text-gray-400 font-bold" title={CARRERA_NOMBRES[al.carrera] || al.carrera || '—'}>
+                                    {al.carrera || al.seccion || '—'}
+                                  </td>
                                   <td className="text-right">
                                     <div className="flex justify-end gap-1">
                                       <button
@@ -1726,16 +1747,32 @@ export default function AdminPage() {
                     />
                   </div>
                   <div>
-                    <label className="label">Sección / Curso</label>
+                    <label className="label">Sección (Opcional)</label>
                     <input
-                      required
                       type="text"
                       className="input-field"
-                      placeholder="A01 o M03"
+                      placeholder="Ej: A01"
                       value={alumnoForm.seccion}
                       onChange={e => setAlumnoForm(p => ({ ...p, seccion: e.target.value }))}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="label">Carrera</label>
+                  <select
+                    required
+                    className="input-field"
+                    value={alumnoForm.carrera}
+                    onChange={e => setAlumnoForm(p => ({ ...p, carrera: e.target.value }))}
+                  >
+                    <option value="" disabled>Seleccionar carrera</option>
+                    {Object.entries(CARRERA_NOMBRES).map(([code, name]) => (
+                      <option key={code} value={code}>
+                        [{code}] — {name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -1812,9 +1849,17 @@ export default function AdminPage() {
                   <span className="font-semibold text-white">{verAlumno.email}</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-white/3">
-                  <span className="text-gray-400 font-bold">Sección / Curso:</span>
-                  <span className="font-semibold text-white font-bold">{verAlumno.seccion || '—'}</span>
+                  <span className="text-gray-400 font-bold">Carrera:</span>
+                  <span className="font-semibold text-white font-bold" title={CARRERA_NOMBRES[verAlumno.carrera] || verAlumno.carrera}>
+                    {CARRERA_NOMBRES[verAlumno.carrera] || verAlumno.carrera || '—'}
+                  </span>
                 </div>
+                {verAlumno.seccion && (
+                  <div className="flex justify-between py-1.5 border-b border-white/3">
+                    <span className="text-gray-400 font-bold">Sección / Curso:</span>
+                    <span className="font-semibold text-white font-bold">{verAlumno.seccion}</span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1.5 border-b border-white/3">
                   <span className="text-gray-400 font-bold">Jornada:</span>
                   <span className="font-semibold text-white">{getJornadaLabel(verAlumno.jornada)}</span>

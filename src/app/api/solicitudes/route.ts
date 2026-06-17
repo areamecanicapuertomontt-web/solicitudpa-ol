@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { alumno, rut, alumno_email, asignatura, seccion, jornada, fecha, docente_id, items } = body
+    const { alumno, rut, alumno_email, asignatura, seccion, jornada, carrera, fecha, docente_id, items } = body
 
     // Validación básica
     if (!alumno || !rut || !asignatura || !seccion || !jornada || !docente_id || !items?.length) {
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         asignatura,
         seccion,
         jornada,
+        carrera: carrera || null,
         docente_id,
         fecha: fechaSolicitud,
         token_aprobacion: token,

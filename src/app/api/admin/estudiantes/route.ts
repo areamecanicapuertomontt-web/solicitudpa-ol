@@ -4,9 +4,9 @@ import { NextRequest } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { nombre, email, rut, seccion, jornada } = body
+    const { nombre, email, rut, seccion, carrera, jornada } = body
 
-    if (!nombre || !email || !rut || !seccion || !jornada) {
+    if (!nombre || !email || !rut || !carrera || !jornada) {
       return Response.json({ error: 'Datos incompletos' }, { status: 400 })
     }
 
@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
         nombre,
         rol: 'ALUMNO',
         rut,
-        seccion,
+        seccion: seccion || null,
+        carrera,
         jornada
       }
     })
@@ -31,6 +32,20 @@ export async function POST(request: NextRequest) {
     if (authError || !authData.user) {
       console.error('Error creando en Auth:', authError)
       return Response.json({ error: authError?.message || 'Error al crear usuario' }, { status: 500 })
+    }
+
+    // Aseguramos que los campos seccion y carrera se guarden en public.perfiles directamente
+    const { error: perfUpdateErr } = await supabase
+      .from('perfiles')
+      .update({
+        seccion: seccion || null,
+        carrera: carrera || null,
+        jornada: jornada
+      })
+      .eq('id', authData.user.id)
+
+    if (perfUpdateErr) {
+      console.error('Error al asegurar campos en perfiles:', perfUpdateErr)
     }
 
     // Obtenemos el perfil insertado para devolverlo
@@ -54,9 +69,9 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, nombre, email, rut, seccion, jornada } = body
+    const { id, nombre, email, rut, seccion, carrera, jornada } = body
 
-    if (!id || !nombre || !email || !rut || !seccion || !jornada) {
+    if (!id || !nombre || !email || !rut || !carrera || !jornada) {
       return Response.json({ error: 'Datos incompletos' }, { status: 400 })
     }
 
@@ -69,7 +84,8 @@ export async function PUT(request: NextRequest) {
         nombre,
         rol: 'ALUMNO',
         rut,
-        seccion,
+        seccion: seccion || null,
+        carrera,
         jornada
       }
     })
@@ -86,7 +102,8 @@ export async function PUT(request: NextRequest) {
         nombre,
         email,
         rut,
-        seccion,
+        seccion: seccion || null,
+        carrera,
         jornada
       })
       .eq('id', id)
