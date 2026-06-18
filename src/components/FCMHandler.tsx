@@ -120,18 +120,11 @@ export default function FCMHandler() {
       const swRegistration = await navigator.serviceWorker.register(
         `/firebase-messaging-sw.js?${queryParams}`
       )
-      console.log('🔔 [FCMHandler:initFCM] Service Worker registrado exitosamente. Esperando que esté activo...')
-      
-      // Esperar a que el service worker se active si no lo está
-      if (swRegistration.installing) {
-        console.log('🔔 [FCMHandler:initFCM] Service Worker instalándose...')
-      }
-      if (swRegistration.waiting) {
-        console.log('🔔 [FCMHandler:initFCM] Service Worker en espera...')
-      }
-      if (swRegistration.active) {
-        console.log('🔔 [FCMHandler:initFCM] Service Worker activo!')
-      }
+      console.log('🔔 [FCMHandler:initFCM] Service Worker registrado. Esperando a que esté listo y activo...')
+
+      // Esperar explícitamente a que el Service Worker esté activo y listo
+      await navigator.serviceWorker.ready
+      console.log('✅ [FCMHandler:initFCM] Service Worker está activo y listo!')
 
       // Obtener el Token FCM
       console.log('🔔 [FCMHandler:initFCM] Obteniendo Token FCM de Firebase Cloud Messaging...')
@@ -210,6 +203,24 @@ export default function FCMHandler() {
         stack: error?.stack,
         errorRaw: error
       })
+      
+      try {
+        console.error('❌ [FCMHandler:initFCM] Error completo (JSON.stringify):', JSON.stringify(error))
+      } catch (jsonErr) {
+        console.error('❌ [FCMHandler:initFCM] No se pudo hacer JSON.stringify del error:', jsonErr)
+      }
+
+      // Los objetos Error nativos y de Firebase a veces devuelven {} en JSON.stringify.
+      // Extraemos todas las propiedades del objeto (incluyendo no enumerables) para asegurar visualización:
+      try {
+        const errorDetails: Record<string, any> = {}
+        Object.getOwnPropertyNames(error).forEach((key) => {
+          errorDetails[key] = error[key]
+        })
+        console.error('📋 [FCMHandler:initFCM] Detalles y propiedades del error (completo):', errorDetails)
+      } catch (propErr) {
+        console.error('❌ [FCMHandler:initFCM] Falló extracción de propiedades del error:', propErr)
+      }
     }
   }
 
