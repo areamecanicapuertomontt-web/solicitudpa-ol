@@ -90,10 +90,29 @@ export default function SolicitudPage() {
   const { fields, append, remove } = useFieldArray({ control, name: 'items' })
 
   useEffect(() => {
-    fetch('/api/docentes')
-      .then(r => r.json())
-      .then(data => setDocentes(data.docentes || []))
-      .catch(() => setDocentes([]))
+    async function loadDocentes() {
+      try {
+        const res = await fetch('/api/docentes')
+        if (!res.ok) throw new Error('Error al cargar docentes')
+        const data = await res.json()
+        setDocentes(data.docentes || [])
+      } catch (err) {
+        console.warn("Fallo al cargar docentes, reintentando en 2 segundos...", err)
+        setTimeout(async () => {
+          try {
+            const res = await fetch('/api/docentes')
+            if (res.ok) {
+              const data = await res.json()
+              setDocentes(data.docentes || [])
+            }
+          } catch (retryErr) {
+            console.error("Reintento de carga de docentes falló:", retryErr)
+            setDocentes([])
+          }
+        }, 2000)
+      }
+    }
+    loadDocentes()
   }, [])
 
 
@@ -176,7 +195,7 @@ export default function SolicitudPage() {
   }, [equiposCatalog, catalogSearch, filtroArea, filtroFrecuencia])
 
   useEffect(() => {
-    async function loadAsignaturas() {
+    async function loadAsignaturas(isRetry = false) {
       const { data, error } = await supabaseClient
         .from('asignaturas')
         .select('*')
@@ -185,6 +204,11 @@ export default function SolicitudPage() {
       
       if (!error && data) {
         setAsignaturas(data)
+      } else if (!isRetry) {
+        console.warn("Fallo al cargar asignaturas, reintentando en 2 segundos...", error)
+        setTimeout(() => {
+          loadAsignaturas(true)
+        }, 2000)
       }
     }
     loadAsignaturas()
