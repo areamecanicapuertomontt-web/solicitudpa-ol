@@ -72,6 +72,8 @@ export default function FCMHandler() {
         appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
       }
 
+      console.log('API KEY:', process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.slice(0, 10))
+
       console.log('🔔 [FCMHandler:initFCM] Configuración de Firebase leída:', {
         apiKey: firebaseConfig.apiKey ? 'Configurado (OK)' : 'FALTANTE ❌',
         projectId: firebaseConfig.projectId ? 'Configurado (OK)' : 'FALTANTE ❌',
