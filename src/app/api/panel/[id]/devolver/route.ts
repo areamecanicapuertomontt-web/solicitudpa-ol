@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase-server'
-import { enviarPushNotificacion } from '@/lib/fcm-server'
+import { enviarPushNotificacion } from '@/lib/push-server'
 import { getJornadaLabel } from '@/lib/utils'
 import { NextRequest } from 'next/server'
 

@@ -1,4 +1,4 @@
-import { enviarPushNotificacion } from '@/lib/fcm-server'
+import { enviarPushNotificacion } from '@/lib/push-server'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {

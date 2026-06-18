@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import FCMHandler from '@/components/FCMHandler'
+import PushHandler from '@/components/PushHandler'
 
 export const metadata: Metadata = {
   title: 'Pañol Mecánico — INACAP Área Mecánica',
@@ -17,7 +17,7 @@ export default function RootLayout({
   return (
     <html lang="es" data-scroll-behavior="smooth">
       <body className="antialiased">
-        <FCMHandler />
+        <PushHandler />
         {children}
       </body>
     </html>
