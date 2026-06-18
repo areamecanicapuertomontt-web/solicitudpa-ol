@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import NotificationBell from '@/components/NotificationBell'
+import HelpButton from '@/components/HelpButton'
 import {
   Package, Clock, CheckCircle2, XCircle, Truck,
   RefreshCw, Search, Settings, ChevronRight,
@@ -340,6 +342,8 @@ function DocenteView({
             <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: isLive ? '#22C55E' : '#60A5FA' }} />
             <span className="text-xs font-semibold hidden sm:inline" style={{ color: isLive ? '#22C55E' : '#60A5FA' }}>{isLive ? 'En vivo' : 'Auto'}</span>
           </div>
+          <NotificationBell />
+          <HelpButton rol="DOCENTE" />
           <button onClick={() => fetchSolicitudes(false)} className="btn-secondary !px-3 !py-2" title="Actualizar">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -938,6 +942,8 @@ export default function PanelPage() {
             </span>
             <Wifi size={12} style={{ color: isLive ? '#22C55E' : '#60A5FA' }} />
           </div>
+          <NotificationBell />
+          <HelpButton rol={profile?.rol} />
           <button onClick={() => fetchSolicitudes(false)} className="btn-secondary !px-3 !py-2" title="Actualizar">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>

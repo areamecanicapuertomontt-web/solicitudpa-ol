@@ -1,5 +1,4 @@
-// src/lib/push-server.ts — Helper servidor para enviar Web Push nativo (sin Firebase Admin)
-
+import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from './supabase-server'
 
 /**
@@ -65,6 +64,23 @@ export async function enviarPushNotificacion(
 
     const result = await res.json()
     console.log(`[push-server] ✅ Notificaciones enviadas: ${result.enviados}/${result.total} exitosas`)
+
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
+      await supabaseAdmin.from('historial_notificaciones').insert(
+        ids.map(uid => ({
+          user_id: uid,
+          titulo: title,
+          mensaje: body,
+          url: url || '/',
+          leido: false
+        }))
+      )
+      console.log(`[push-server] ✅ Historial de notificaciones registrado para ${ids.length} usuarios`)
+    } catch (dbErr) {
+      console.error('[push-server] Error al guardar historial en BD:', dbErr)
+    }
+
     return { success: true, count: result.enviados }
   } catch (err: any) {
     console.error('[push-server] Error llamando a la Edge Function send-push:', err)

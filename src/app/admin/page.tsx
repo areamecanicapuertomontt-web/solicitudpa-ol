@@ -13,6 +13,8 @@ import { useRouter } from 'next/navigation'
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { Docente, Solicitud, Jornada, EstadoSolicitud } from '@/lib/types'
+import NotificationBell from '@/components/NotificationBell'
+import HelpButton from '@/components/HelpButton'
 
 function Pagination({
   currentPage,
@@ -720,13 +722,17 @@ export default function AdminPage() {
                     {profile.rol}
                   </span>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors"
-                  title="Cerrar Sesión"
-                >
-                  <LogOut size={15} />
-                </button>
+                <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+                  <NotificationBell />
+                  <HelpButton rol="ADMIN" />
+                  <button
+                    onClick={handleLogout}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors"
+                    title="Cerrar Sesión"
+                  >
+                    <LogOut size={15} />
+                  </button>
+                </div>
               </div>
             )}
           </div>

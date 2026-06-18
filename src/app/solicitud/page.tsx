@@ -33,6 +33,8 @@ import {
 } from 'lucide-react'
 import type { Docente } from '@/lib/types'
 import { supabaseClient } from '@/lib/supabase-client'
+import NotificationBell from '@/components/NotificationBell'
+import HelpButton from '@/components/HelpButton'
 
 
 const schema = z.object({
@@ -401,14 +403,18 @@ export default function SolicitudPage() {
                   {profile.email}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors"
-                title="Cerrar Sesión"
-              >
-                <LogOut size={16} />
-              </button>
+              <div className="flex items-center gap-1.5 border-l border-white/10 pl-2">
+                <NotificationBell />
+                <HelpButton rol="ALUMNO" />
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors"
+                  title="Cerrar Sesión"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
             </div>
           )}
         </div>

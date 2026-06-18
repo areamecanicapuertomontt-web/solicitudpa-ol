@@ -60,10 +60,6 @@ export async function PATCH(
     const itemsDevueltos = allItems.filter(i => devueltosIds.has(i.id))
     const itemsPendientes = allItems.filter(i => !devueltosIds.has(i.id))
 
-    if (itemsDevueltos.length === 0) {
-      return Response.json({ error: 'Debes marcar al menos un artículo como devuelto' }, { status: 400 })
-    }
-
     const devolucionCompleta = itemsPendientes.length === 0
     let nuevoEstado = 'DEVUELTA'
 
@@ -92,56 +88,58 @@ export async function PATCH(
       // Caso B: Devolución parcial. Se divide la solicitud.
       nuevoEstado = 'DEVUELTA_INCOMPLETA'
 
-      // 1. Obtener los datos de la solicitud original
-      const { data: solOriginal, error: solErr } = await supabase
-        .from('solicitudes')
-        .select('*')
-        .eq('id', id)
-        .single()
+      if (itemsDevueltos.length > 0) {
+        // 1. Obtener los datos de la solicitud original
+        const { data: solOriginal, error: solErr } = await supabase
+          .from('solicitudes')
+          .select('*')
+          .eq('id', id)
+          .single()
 
-      if (solErr || !solOriginal) {
-        console.error('Error cargando la solicitud original:', solErr)
-        return Response.json({ error: 'No se pudo cargar la solicitud de préstamo original' }, { status: 500 })
-      }
+        if (solErr || !solOriginal) {
+          console.error('Error cargando la solicitud original:', solErr)
+          return Response.json({ error: 'No se pudo cargar la solicitud de préstamo original' }, { status: 500 })
+        }
 
-      // 2. Crear una nueva solicitud clonada con estado 'DEVUELTA' (directo a Historial / Listo)
-      const { data: newSol, error: newSolErr } = await supabase
-        .from('solicitudes')
-        .insert([{
-          alumno: solOriginal.alumno,
-          rut: solOriginal.rut,
-          alumno_email: solOriginal.alumno_email,
-          asignatura: solOriginal.asignatura,
-          seccion: solOriginal.seccion,
-          jornada: solOriginal.jornada,
-          fecha: solOriginal.fecha,
-          estado: 'DEVUELTA',
-          docente_id: solOriginal.docente_id,
-          token_aprobacion: solOriginal.token_aprobacion ? `${solOriginal.token_aprobacion}-clon-${Math.random().toString(36).substring(2, 7)}` : null,
-          codigo_entrega: solOriginal.codigo_entrega,
-          observaciones: `Devolución parcial. Original: ${id}`
-        }])
-        .select()
-        .single()
+        // 2. Crear una nueva solicitud clonada con estado 'DEVUELTA' (directo a Historial / Listo)
+        const { data: newSol, error: newSolErr } = await supabase
+          .from('solicitudes')
+          .insert([{
+            alumno: solOriginal.alumno,
+            rut: solOriginal.rut,
+            alumno_email: solOriginal.alumno_email,
+            asignatura: solOriginal.asignatura,
+            seccion: solOriginal.seccion,
+            jornada: solOriginal.jornada,
+            fecha: solOriginal.fecha,
+            estado: 'DEVUELTA',
+            docente_id: solOriginal.docente_id,
+            token_aprobacion: solOriginal.token_aprobacion ? `${solOriginal.token_aprobacion}-clon-${Math.random().toString(36).substring(2, 7)}` : null,
+            codigo_entrega: solOriginal.codigo_entrega,
+            observaciones: `Devolución parcial. Original: ${id}`
+          }])
+          .select()
+          .single()
 
-      if (newSolErr || !newSol) {
-        console.error('Error al clonar la solicitud:', newSolErr)
-        return Response.json({ error: 'Error al registrar la partición de la devolución' }, { status: 500 })
-      }
+        if (newSolErr || !newSol) {
+          console.error('Error al clonar la solicitud:', newSolErr)
+          return Response.json({ error: 'Error al registrar la partición de la devolución' }, { status: 500 })
+        }
 
-      // 3. Mover los ítems devueltos a la nueva solicitud
-      for (const item of itemsDevueltos) {
-        const { error: itemUpdateErr } = await supabase
-          .from('items_solicitud')
-          .update({
-            solicitud_id: newSol.id,
-            devuelto: true
-          })
-          .eq('id', item.id)
+        // 3. Mover los ítems devueltos a la nueva solicitud
+        for (const item of itemsDevueltos) {
+          const { error: itemUpdateErr } = await supabase
+            .from('items_solicitud')
+            .update({
+              solicitud_id: newSol.id,
+              devuelto: true
+            })
+            .eq('id', item.id)
 
-        if (itemUpdateErr) {
-          console.error(`Error al mover ítem ${item.id} a la nueva solicitud:`, itemUpdateErr)
-          return Response.json({ error: 'Error al redistribuir materiales en la base de datos' }, { status: 500 })
+          if (itemUpdateErr) {
+            console.error(`Error al mover ítem ${item.id} a la nueva solicitud:`, itemUpdateErr)
+            return Response.json({ error: 'Error al redistribuir materiales en la base de datos' }, { status: 500 })
+          }
         }
       }
 
