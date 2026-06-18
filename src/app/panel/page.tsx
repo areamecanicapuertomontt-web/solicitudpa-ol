@@ -597,6 +597,7 @@ export default function PanelPage() {
   const [modalSolicitud, setModalSolicitud] = useState<Solicitud | null>(null)
   const [isLive, setIsLive] = useState(false)
   const [profile, setProfile] = useState<any>(null)
+  const [reenviando, setReenviando] = useState<string | null>(null)
 
   // ── Pagination States ──
   const itemsPerPage = 10
@@ -673,6 +674,37 @@ export default function PanelPage() {
       console.error('Error al cerrar sesión:', err)
     }
     window.location.href = '/login'
+  }
+
+  async function handleReenviarCodigo(id: string) {
+    setReenviando(id)
+    try {
+      const { data: { session } } = await supabaseBrowser.auth.getSession()
+      if (!session) {
+        alert('Sesión expirada. Por favor inicia sesión nuevamente.')
+        return
+      }
+
+      const res = await fetch(`/api/solicitudes/${id}/reenviar-codigo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        alert('🔔 Código de entrega re-enviado correctamente al alumno.')
+      } else {
+        alert(`❌ Error al re-enviar: ${data.error || 'Intenta nuevamente'}`)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('❌ Error de red al re-enviar el código.')
+    } finally {
+      setReenviando(null)
+    }
   }
 
 
@@ -1260,13 +1292,32 @@ export default function PanelPage() {
               {selected.estado === 'APROBADA' && (
                 <>
                   {profile?.rol !== 'DOCENTE' ? (
-                    <button
-                      onClick={() => setModalSolicitud(selected)}
-                      className="btn-success w-full mt-5 py-3"
-                    >
-                      <KeyRound size={16} />
-                      Ingresar Código y Entregar
-                    </button>
+                    <div className="flex flex-col gap-2 mt-5">
+                      <button
+                        onClick={() => setModalSolicitud(selected)}
+                        className="btn-success w-full py-3"
+                      >
+                        <KeyRound size={16} />
+                        Ingresar Código y Entregar
+                      </button>
+                      <button
+                        onClick={() => handleReenviarCodigo(selected.id)}
+                        disabled={reenviando === selected.id}
+                        className="btn-secondary w-full py-2.5 text-xs flex items-center justify-center gap-1.5 hover:!text-white"
+                      >
+                        {reenviando === selected.id ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" />
+                            Re-enviando código...
+                          </>
+                        ) : (
+                          <>
+                            <Bell size={13} />
+                            Re-enviar código al Alumno 🔑
+                          </>
+                        )}
+                      </button>
+                    </div>
                   ) : (
                     <div className="mt-5 p-4 rounded-xl text-center border bg-yellow-500/5 border-yellow-500/10">
                       <Clock size={24} className="mx-auto mb-1.5 text-yellow-500 animate-pulse" />
