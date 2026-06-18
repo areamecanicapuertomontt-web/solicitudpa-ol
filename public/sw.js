@@ -11,8 +11,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Área Mecánica INACAP";
   const options = {
     body: data.body || "",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/icon.png",
+    badge: "/icon.png",
     data: { url: data.url || "/" },
     requireInteraction: false,
   };
