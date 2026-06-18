@@ -1,4 +1,25 @@
-// public/sw.js — Service Worker para Web Push nativo (sin Firebase)
+// public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
+
+const CACHE_NAME = "inacap-panol-v1.2.0";
+
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            console.log("[sw] Limpiando caché antigua:", cache);
+            return caches.delete(cache);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
 
 self.addEventListener("push", (event) => {
   let data = {};

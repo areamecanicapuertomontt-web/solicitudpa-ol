@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import PushHandler from '@/components/PushHandler'
+import PWAInstallPrompt from '@/components/PWAInstallPrompt'
 
 export const metadata: Metadata = {
   title: 'Pañol Mecánico — INACAP Área Mecánica',
@@ -18,6 +19,7 @@ export default function RootLayout({
     <html lang="es" data-scroll-behavior="smooth">
       <body className="antialiased">
         <PushHandler />
+        <PWAInstallPrompt />
         {children}
       </body>
     </html>
