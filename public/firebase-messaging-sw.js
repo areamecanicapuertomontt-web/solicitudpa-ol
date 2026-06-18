@@ -3,6 +3,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
 // Obtener parámetros de configuración desde la URL de registro
+console.log('[firebase-messaging-sw.js] Parseando parámetros desde URL del Service Worker:', location.search);
 const params = new URLSearchParams(location.search);
 const firebaseConfig = {
   apiKey: params.get('apiKey'),
@@ -13,8 +14,17 @@ const firebaseConfig = {
   appId: params.get('appId'),
 };
 
+console.log('[firebase-messaging-sw.js] Configuración leída:', {
+  apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.slice(0, 10)}...` : 'NULO ❌',
+  authDomain: firebaseConfig.authDomain ? 'Configurado (OK)' : 'NULO ❌',
+  projectId: firebaseConfig.projectId ? 'Configurado (OK)' : 'NULO ❌',
+  messagingSenderId: firebaseConfig.messagingSenderId ? 'Configurado (OK)' : 'NULO ❌',
+  appId: firebaseConfig.appId ? `${firebaseConfig.appId.slice(0, 15)}...` : 'NULO ❌',
+});
+
 // Inicializar Firebase si los parámetros básicos están presentes
 if (firebaseConfig.apiKey && firebaseConfig.messagingSenderId) {
+  console.log('[firebase-messaging-sw.js] Inicializando Firebase SDK en Service Worker...');
   firebase.initializeApp(firebaseConfig);
   const messaging = firebase.messaging();
 
