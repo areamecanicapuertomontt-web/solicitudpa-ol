@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import NotificationBell from '@/components/NotificationBell'
@@ -608,6 +608,8 @@ export default function PanelPage() {
   const itemsPerPage = 10
   const [page, setPage] = useState(1)
 
+  const profileLoadedRef = useRef(false)
+
   // Reset page and selection when search or filters change
   useEffect(() => {
     setPage(1)
@@ -630,18 +632,38 @@ export default function PanelPage() {
 
     async function fetchProfile(user: any) {
       if (!user) return
-      const { data, error } = await supabaseBrowser
-        .from('perfiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      
+      let profileData = null
+      let profileError = null
+      
+      try {
+        // Promesa para la consulta a perfiles
+        const queryPromise = supabaseBrowser
+          .from('perfiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        
+        // Promesa de timeout para evitar cuelgues de red infinitos
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 3000)
+        )
+        
+        // Competir: el primero que responda
+        const res = await Promise.race([queryPromise, timeoutPromise])
+        profileData = res.data
+        profileError = res.error
+      } catch (err: any) {
+        profileError = err
+      }
       
       if (active) {
-        if (!error && data) {
-          setProfile(data)
+        if (!profileError && profileData) {
+          setProfile(profileData)
           setLoadingProfile(false)
+          profileLoadedRef.current = true
         } else {
-          console.warn("Error al cargar perfil en primer intento, usando fallback temporal:", error)
+          console.warn("Error o timeout al cargar perfil, usando fallback temporal:", profileError)
           // Fallback temporal usando metadata de auth
           const fallbackPerf = {
             id: user.id,
@@ -653,22 +675,33 @@ export default function PanelPage() {
             seccion: user.user_metadata?.seccion || '',
           }
           setProfile(fallbackPerf)
+          setLoadingProfile(false) // Quitar loading inmediatamente
+          profileLoadedRef.current = true
           
-          // Reintentar en 1.2 segundos por si RLS estaba esperando la sincronización del token
+          // Reintentar en 1.5 segundos por si RLS estaba esperando la sincronización del token
           setTimeout(async () => {
             if (!active) return
             console.log("Reintentando cargar perfil desde la tabla perfiles...")
-            const { data: retryData, error: retryErr } = await supabaseBrowser
-              .from('perfiles')
-              .select('*')
-              .eq('id', user.id)
-              .single()
-            if (!retryErr && retryData) {
-              console.log("✅ Perfil cargado exitosamente en reintento.")
-              setProfile(retryData)
+            try {
+              const queryPromise = supabaseBrowser
+                .from('perfiles')
+                .select('*')
+                .eq('id', user.id)
+                .single()
+              
+              const timeoutPromise = new Promise<any>((_, reject) =>
+                setTimeout(() => reject(new Error('Timeout de reintento')), 3000)
+              )
+              
+              const retryRes = await Promise.race([queryPromise, timeoutPromise])
+              if (!retryRes.error && retryRes.data) {
+                console.log("✅ Perfil cargado exitosamente en reintento.")
+                setProfile(retryRes.data)
+              }
+            } catch (retryErr) {
+              console.warn("Reintento de carga de perfil falló o expiró:", retryErr)
             }
-            setLoadingProfile(false)
-          }, 1200)
+          }, 1500)
         }
       }
     }
@@ -692,7 +725,9 @@ export default function PanelPage() {
           setTimeout(() => {
             if (active) {
               supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
-                if (!session) {
+                if (session?.user) {
+                  fetchProfile(session.user)
+                } else if (!session) {
                   router.replace('/login')
                 }
               })
@@ -702,9 +737,18 @@ export default function PanelPage() {
       }
     })
 
+    // Timeout de seguridad global de 5 segundos
+    const safetyTimeout = setTimeout(() => {
+      if (active && !profileLoadedRef.current) {
+        console.warn("[PanelPage] Timeout global de 5s expiró sin perfil. Redirigiendo a /login...");
+        router.replace('/login')
+      }
+    }, 5000)
+
     return () => {
       active = false
       subscription.unsubscribe()
+      clearTimeout(safetyTimeout)
     }
   }, [router])
 

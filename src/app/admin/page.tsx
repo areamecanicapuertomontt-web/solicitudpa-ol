@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Trash2, Save, Users, Package, LogOut,
   LayoutDashboard, Wrench, FileText, Database, ShieldAlert,
@@ -117,6 +117,7 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [profile, setProfile] = useState<any>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
+  const profileLoadedRef = useRef(false)
   
   // Data lists
   const [docentes, setDocentes] = useState<Docente[]>([])
@@ -206,22 +207,39 @@ export default function AdminPage() {
 
     async function fetchProfile(user: any) {
       if (!user) return
-      const { data, error } = await supabaseBrowser
-        .from('perfiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      
+      let profileData = null
+      let profileError = null
+      
+      try {
+        const queryPromise = supabaseBrowser
+          .from('perfiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 3000)
+        )
+        
+        const res = await Promise.race([queryPromise, timeoutPromise])
+        profileData = res.data
+        profileError = res.error
+      } catch (err: any) {
+        profileError = err
+      }
       
       if (active) {
-        if (!error && data) {
-          if (data.rol !== 'ADMIN' && data.rol !== 'PANOL') {
+        if (!profileError && profileData) {
+          if (profileData.rol !== 'ADMIN' && profileData.rol !== 'PANOL') {
             router.replace('/login')
           } else {
-            setProfile(data)
+            setProfile(profileData)
             setLoadingProfile(false)
+            profileLoadedRef.current = true
           }
         } else {
-          console.warn("Error al cargar perfil admin en primer intento, usando fallback temporal:", error)
+          console.warn("Error al cargar perfil admin en primer intento, usando fallback temporal:", profileError)
           // Fallback temporal usando metadata de auth
           const fallbackPerf = {
             id: user.id,
@@ -235,25 +253,37 @@ export default function AdminPage() {
             router.replace('/login')
           } else {
             setProfile(fallbackPerf)
+            setLoadingProfile(false) // Quitar loading inmediatamente
+            profileLoadedRef.current = true
             
-            // Reintentar en 1.2 segundos por si RLS estaba esperando la sincronización del token
+            // Reintentar en 1.5 segundos por si RLS estaba esperando la sincronización del token
             setTimeout(async () => {
               if (!active) return
               console.log("Reintentando cargar perfil admin desde perfiles...")
-              const { data: retryData, error: retryErr } = await supabaseBrowser
-                .from('perfiles')
-                .select('*')
-                .eq('id', user.id)
-                .single()
-              if (!retryErr && retryData) {
-                if (retryData.rol !== 'ADMIN' && retryData.rol !== 'PANOL') {
-                  router.replace('/login')
-                } else {
-                  setProfile(retryData)
+              try {
+                const queryPromise = supabaseBrowser
+                  .from('perfiles')
+                  .select('*')
+                  .eq('id', user.id)
+                  .single()
+                
+                const timeoutPromise = new Promise<any>((_, reject) =>
+                  setTimeout(() => reject(new Error('Timeout de reintento')), 3000)
+                )
+                
+                const retryRes = await Promise.race([queryPromise, timeoutPromise])
+                if (!retryRes.error && retryRes.data) {
+                  if (retryRes.data.rol !== 'ADMIN' && retryRes.data.rol !== 'PANOL') {
+                    router.replace('/login')
+                  } else {
+                    console.log("✅ Perfil admin cargado exitosamente en reintento.")
+                    setProfile(retryRes.data)
+                  }
                 }
+              } catch (retryErr) {
+                console.warn("Reintento admin falló o expiró:", retryErr)
               }
-              setLoadingProfile(false)
-            }, 1200)
+            }, 1500)
           }
         }
       }
@@ -278,7 +308,9 @@ export default function AdminPage() {
           setTimeout(() => {
             if (active) {
               supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
-                if (!session) {
+                if (session?.user) {
+                  fetchProfile(session.user)
+                } else if (!session) {
                   router.replace('/login')
                 }
               })
@@ -288,9 +320,18 @@ export default function AdminPage() {
       }
     })
 
+    // Timeout de seguridad global de 5 segundos
+    const safetyTimeout = setTimeout(() => {
+      if (active && !profileLoadedRef.current) {
+        console.warn("[AdminPage] Timeout global de 5s expiró sin perfil. Redirigiendo a /login...");
+        router.replace('/login')
+      }
+    }, 5000)
+
     return () => {
       active = false
       subscription.unsubscribe()
+      clearTimeout(safetyTimeout)
     }
   }, [router])
 
