@@ -1,4 +1,4 @@
-import { createServerClient } from '@/lib/supabase-server'
+import { createServerClient, createCookieClient } from '@/lib/supabase-server'
 import { NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -6,13 +6,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const estado = searchParams.get('estado')
 
-    const supabase = createServerClient()
-    
-    // 1. Obtener usuario autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // 1. Obtener usuario autenticado usando el cliente de cookies
+    const cookieClient = await createCookieClient()
+    const { data: { user }, error: authError } = await cookieClient.auth.getUser()
     if (authError || !user) {
       return Response.json({ error: 'No autorizado' }, { status: 401 })
     }
+
+    const supabase = createServerClient()
 
     // 2. Obtener rol del perfil
     const { data: perfil, error: perfilError } = await supabase
