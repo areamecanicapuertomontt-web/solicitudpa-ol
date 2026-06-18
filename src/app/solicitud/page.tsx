@@ -152,7 +152,7 @@ export default function SolicitudPage() {
       }
     } catch (err) {
       console.error("Error loading profile:", err)
-      throw err
+      // No re-lanzamos el error para no bloquear la carga de la página
     }
   }
 
@@ -162,47 +162,58 @@ export default function SolicitudPage() {
     setInitialDataError(null)
 
     const runLoading = async () => {
-      // A. Cargar docentes
-      const docRes = await fetch('/api/docentes')
-      if (!docRes.ok) throw new Error('Error de red al cargar docentes')
-      const docData = await docRes.json()
-      setDocentes(docData.docentes || [])
+      // Definir promesas en paralelo
+      const docentesPromise = fetch('/api/docentes').then(async (res) => {
+        if (!res.ok) throw new Error('Error al cargar docentes')
+        const data = await res.json()
+        return data.docentes || []
+      })
 
-      // B. Cargar catálogo de equipos
-      const { data: eqData, error: eqErr } = await supabaseClient
+      const equiposPromise = supabaseClient
         .from('equipos')
         .select('id, nombre, codigo_inventario, frecuencia, secciones_mantencion(nombre)')
         .eq('activo', true)
         .order('nombre')
-      if (eqErr) throw eqErr
-      if (eqData) {
-        setEquiposCatalog(eqData.map((e: any) => ({
-          id: e.id,
-          nombre: e.nombre,
-          codigo_inventario: e.codigo_inventario,
-          frecuencia: e.frecuencia,
-          seccion_nombre: e.secciones_mantencion?.nombre || null
-        })))
-      }
+        .then(({ data, error }) => {
+          if (error) throw error
+          return data || []
+        })
 
-      // C. Cargar asignaturas
-      const { data: asData, error: asErr } = await supabaseClient
+      const asignaturasPromise = supabaseClient
         .from('asignaturas')
         .select('*')
         .order('nivel', { ascending: true })
         .order('nombre', { ascending: true })
-      if (asErr) throw asErr
-      if (asData) {
-        setAsignaturas(asData)
-      }
+        .then(({ data, error }) => {
+          if (error) throw error
+          return data || []
+        })
 
-      // D. Cargar perfil
-      await loadProfile()
+      const perfilPromise = loadProfile()
+
+      // Ejecutar consultas en paralelo
+      const [docentesData, equiposData, asignaturasData] = await Promise.all([
+        docentesPromise,
+        equiposPromise,
+        asignaturasPromise,
+        perfilPromise
+      ])
+
+      // Asignar los resultados a los estados
+      setDocentes(docentesData)
+      setEquiposCatalog(equiposData.map((e: any) => ({
+        id: e.id,
+        nombre: e.nombre,
+        codigo_inventario: e.codigo_inventario,
+        frecuencia: e.frecuencia,
+        seccion_nombre: e.secciones_mantencion?.nombre || null
+      })))
+      setAsignaturas(asignaturasData)
     }
 
-    // Si tarda más de 5 segundos, cancelar y mostrar el botón de reintentar
+    // Aumentar a 8 segundos para evitar falsos positivos en conexiones lentas o arranques en frío
     const timeoutPromise = new Promise<any>((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout de carga (5s)')), 5000)
+      setTimeout(() => reject(new Error('Timeout de carga (8s)')), 8000)
     )
 
     try {
