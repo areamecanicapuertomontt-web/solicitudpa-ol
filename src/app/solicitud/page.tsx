@@ -88,172 +88,15 @@ export default function SolicitudPage() {
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' })
-  const [loadingInitialData, setLoadingInitialData] = useState(true)
-  const [initialDataError, setInitialDataError] = useState<string | null>(null)
 
-  // 1. Cargar datos del perfil de usuario
-  async function loadProfile() {
-    try {
-      const userPromise = supabaseClient.auth.getUser()
-      const timeoutPromise = new Promise<any>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout')), 4000)
-      )
-      const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
-      if (user) {
-        let perf = null
-        try {
-          const { data } = await supabaseClient
-            .from('perfiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-          perf = data
-        } catch (e) {
-          console.error("Error cargando perfil desde tabla perfiles:", e)
-        }
-
-        // Fallback: Si no existe en la tabla perfiles, usamos metadatos de auth
-        if (!perf) {
-          perf = {
-            id: user.id,
-            email: user.email,
-            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-            rol: user.user_metadata?.rol || 'ALUMNO',
-            rut: user.user_metadata?.rut || '',
-            jornada: user.user_metadata?.jornada || 'D',
-            seccion: user.user_metadata?.seccion || '',
-          }
-        }
-
-        setProfile(perf)
-        setValue('alumno', perf.nombre || '')
-        setValue('rut', perf.rut || '')
-        setValue('alumno_email', perf.email || '')
-        if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
-
-        // Carrera: primero desde columna carrera, luego detección por sección (compatibilidad)
-        const carreraFromProfile = perf.carrera || null
-        const seccionVal = perf.seccion || ''
-
-        let detected = carreraFromProfile
-        if (!detected) {
-          // fallback: detectar por nombre de sección
-          detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
-            ? 'IMI'
-            : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
-            ? 'MI'
-            : 'ALL'
-        }
-
-        setSelectedCarrera(detected || 'ALL')
-
-        // Sección: siempre guardamos el valor de sección (aunque sea largo, o fallback a 'N/A')
-        setValue('seccion', seccionVal || 'N/A')
-      }
-    } catch (err) {
-      console.error("Error loading profile:", err)
-      // No re-lanzamos el error para no bloquear la carga de la página
-    }
-  }
-
-  // 2. Función unificada de carga de datos iniciales con soporte de reintentos y tiempo de espera máximo
-  const loadInitialData = async () => {
-    setLoadingInitialData(true)
-    setInitialDataError(null)
-
-    const runLoading = async () => {
-      // Definir promesas en paralelo
-      const docentesPromise = fetch('/api/docentes').then(async (res) => {
-        if (!res.ok) throw new Error('Error al cargar docentes')
-        const data = await res.json()
-        return data.docentes || []
-      })
-
-      const equiposPromise = supabaseClient
-        .from('equipos')
-        .select('id, nombre, codigo_inventario, frecuencia, secciones_mantencion(nombre)')
-        .eq('activo', true)
-        .order('nombre')
-        .then(({ data, error }) => {
-          if (error) throw error
-          return data || []
-        })
-
-      const asignaturasPromise = supabaseClient
-        .from('asignaturas')
-        .select('*')
-        .order('nivel', { ascending: true })
-        .order('nombre', { ascending: true })
-        .then(({ data, error }) => {
-          if (error) throw error
-          return data || []
-        })
-
-      const perfilPromise = loadProfile()
-
-      // Ejecutar consultas en paralelo
-      const [docentesData, equiposData, asignaturasData] = await Promise.all([
-        docentesPromise,
-        equiposPromise,
-        asignaturasPromise,
-        perfilPromise
-      ])
-
-      // Asignar los resultados a los estados
-      setDocentes(docentesData)
-      setEquiposCatalog(equiposData.map((e: any) => ({
-        id: e.id,
-        nombre: e.nombre,
-        codigo_inventario: e.codigo_inventario,
-        frecuencia: e.frecuencia,
-        seccion_nombre: e.secciones_mantencion?.nombre || null
-      })))
-      setAsignaturas(asignaturasData)
-    }
-
-    const maxRetries = 3
-    let attempt = 0
-    let success = false
-    let lastError = null
-
-    while (attempt < maxRetries && !success) {
-      attempt++
-      console.log(`[loadInitialData] Intento ${attempt} de ${maxRetries}...`)
-
-      // Aumentar a 15 segundos para evitar falsos positivos en cold starts de Vercel
-      const timeoutPromise = new Promise<any>((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout de carga en intento ${attempt} (15s)`)), 15000)
-      )
-
-      try {
-        await Promise.race([runLoading(), timeoutPromise])
-        success = true
-        console.log(`[loadInitialData] ✅ Intento ${attempt} exitoso.`)
-      } catch (err: any) {
-        lastError = err
-        console.warn(`[loadInitialData] ❌ Intento ${attempt} falló:`, err.message || err)
-        
-        if (attempt < maxRetries) {
-          // Esperar 2 segundos antes del siguiente intento
-          await new Promise(resolve => setTimeout(resolve, 2000))
-        }
-      }
-    }
-
-    if (!success) {
-      console.error('Error definitivo al cargar datos iniciales en Alumno page:', lastError)
-      setInitialDataError('Error al conectar con la base de datos INACAP.')
-    } else {
-      setInitialDataError(null)
-    }
-
-    setLoadingInitialData(false)
-  }
-
-  // 3. Ejecutar carga inicial en montaje
   useEffect(() => {
-    loadInitialData()
+    fetch('/api/docentes')
+      .then(r => r.json())
+      .then(data => setDocentes(data.docentes || []))
+      .catch(() => setDocentes([]))
   }, [])
+
+
 
   // Cerrar autocomplete al hacer click fuera
   useEffect(() => {
@@ -266,43 +109,25 @@ export default function SolicitudPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Cargar pañoleros activos (presencia en tiempo real)
+  // Cargar catálogo de equipos del Plan de Mantención para autocompletar
   useEffect(() => {
-    async function loadActivePanoleros() {
-      try {
-        const { data, error } = await supabaseClient
-          .from('perfiles')
-          .select('nombre, rol, last_seen')
-          .in('rol', ['PANOL', 'ADMIN'])
-        
-        if (error) {
-          console.warn("Error al cargar perfiles activos (posiblemente falta ejecutar SQL en Supabase):", error.message)
-          setLoadingPanoleros(false)
-          return
-        }
-
-        if (data) {
-          const now = new Date()
-          const active = data.filter((p: any) => {
-            if (!p.last_seen) return false
-            const lastSeenDate = new Date(p.last_seen)
-            const diffMs = now.getTime() - lastSeenDate.getTime()
-            // Considerar activo si reportó en los últimos 90 segundos (90000 ms)
-            // Tolerancia de desfase de reloj cliente-servidor de hasta 30 segundos en el futuro (diffMs >= -30000)
-            return diffMs >= -30000 && diffMs < 90000
-          })
-          setActivePanoleros(active)
-        }
-      } catch (err) {
-        console.error("Error al verificar presencia de pañoleros:", err)
-      } finally {
-        setLoadingPanoleros(false)
+    async function loadEquipos() {
+      const { data } = await supabaseClient
+        .from('equipos')
+        .select('id, nombre, codigo_inventario, frecuencia, secciones_mantencion(nombre)')
+        .eq('activo', true)
+        .order('nombre')
+      if (data) {
+        setEquiposCatalog(data.map((e: any) => ({
+          id: e.id,
+          nombre: e.nombre,
+          codigo_inventario: e.codigo_inventario,
+          frecuencia: e.frecuencia,
+          seccion_nombre: e.secciones_mantencion?.nombre || null
+        })))
       }
     }
-
-    loadActivePanoleros()
-    const interval = setInterval(loadActivePanoleros, 20000)
-    return () => clearInterval(interval)
+    loadEquipos()
   }, [])
 
   const handleAddEquipoToSolicitud = (id: string, nombre: string) => {
@@ -349,6 +174,126 @@ export default function SolicitudPage() {
       return true
     })
   }, [equiposCatalog, catalogSearch, filtroArea, filtroFrecuencia])
+
+  useEffect(() => {
+    async function loadAsignaturas() {
+      const { data, error } = await supabaseClient
+        .from('asignaturas')
+        .select('*')
+        .order('nivel', { ascending: true })
+        .order('nombre', { ascending: true })
+      
+      if (!error && data) {
+        setAsignaturas(data)
+      }
+    }
+    loadAsignaturas()
+  }, [])
+
+  // Cargar pañoleros activos
+  useEffect(() => {
+    async function loadActivePanoleros() {
+      try {
+        const { data, error } = await supabaseClient
+          .from('perfiles')
+          .select('nombre, rol, last_seen')
+          .in('rol', ['PANOL', 'ADMIN'])
+        
+        if (error) {
+          console.warn("Error al cargar perfiles activos (posiblemente falta ejecutar SQL en Supabase):", error.message)
+          setLoadingPanoleros(false)
+          return
+        }
+
+        if (data) {
+          const now = new Date()
+          const active = data.filter((p: any) => {
+            if (!p.last_seen) return false
+            const lastSeenDate = new Date(p.last_seen)
+            const diffMs = now.getTime() - lastSeenDate.getTime()
+            // Considerar activo si reportó en los últimos 90 segundos (90000 ms)
+            // Tolerancia de desfase de reloj cliente-servidor de hasta 30 segundos en el futuro (diffMs >= -30000)
+            return diffMs >= -30000 && diffMs < 90000
+          })
+          setActivePanoleros(active)
+        }
+      } catch (err) {
+        console.error("Error al verificar presencia de pañoleros:", err)
+      } finally {
+        setLoadingPanoleros(false)
+      }
+    }
+
+    loadActivePanoleros()
+    const interval = setInterval(loadActivePanoleros, 20000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const userPromise = supabaseClient.auth.getUser()
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 3000)
+        )
+        const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
+        if (user) {
+          let perf = null
+          try {
+            const { data } = await supabaseClient
+              .from('perfiles')
+              .select('*')
+              .eq('id', user.id)
+              .single()
+            perf = data
+          } catch (e) {
+            console.error("Error cargando perfil desde tabla perfiles:", e)
+          }
+
+          // Fallback: Si no existe en la tabla perfiles, usamos metadatos de auth
+          if (!perf) {
+            perf = {
+              id: user.id,
+              email: user.email,
+              nombre: user.user_metadata?.nombre || 'Usuario Inacap',
+              rol: user.user_metadata?.rol || 'ALUMNO',
+              rut: user.user_metadata?.rut || '',
+              jornada: user.user_metadata?.jornada || 'D',
+              seccion: user.user_metadata?.seccion || '',
+            }
+          }
+
+          setProfile(perf)
+          setValue('alumno', perf.nombre || '')
+          setValue('rut', perf.rut || '')
+          setValue('alumno_email', perf.email || '')
+          if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
+
+          // Carrera: primero desde columna carrera, luego detección por sección (compatibilidad)
+          const carreraFromProfile = perf.carrera || null
+          const seccionVal = perf.seccion || ''
+
+          let detected = carreraFromProfile
+          if (!detected) {
+            // fallback: detectar por nombre de sección
+            detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
+              ? 'IMI'
+              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
+              ? 'MI'
+              : 'ALL'
+          }
+
+          setSelectedCarrera(detected || 'ALL')
+
+          // Sección: siempre guardamos el valor de sección (aunque sea largo, o fallback a 'N/A')
+          setValue('seccion', seccionVal || 'N/A')
+        }
+      } catch (err) {
+        console.error("Error loading profile:", err)
+      }
+    }
+    loadProfile()
+  }, [setValue])
 
   // Mapa de código a nombre completo de carrera
   const CARRERA_NOMBRES: Record<string, string> = {
@@ -423,46 +368,6 @@ export default function SolicitudPage() {
   }
 
 
-
-  if (loadingInitialData) {
-    return (
-      <main className="min-h-screen py-8 px-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="max-w-md w-full text-center space-y-4">
-          <div className="flex justify-center">
-            <span className="w-10 h-10 border-4 border-white/20 border-t-red-600 rounded-full animate-spin" />
-          </div>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest animate-pulse">Cargando base de datos INACAP...</p>
-        </div>
-      </main>
-    )
-  }
-
-  if (initialDataError) {
-    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
-    return (
-      <main className="min-h-screen py-8 px-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="max-w-md w-full bg-[#1B2838] border border-white/5 p-6 rounded-2xl shadow-xl text-center space-y-4 animate-fade-in">
-          <div className="flex justify-center text-red-500">
-            <AlertCircle size={40} />
-          </div>
-          <h3 className="text-base font-black uppercase tracking-wider text-white">
-            {isOnline ? 'Error de Servidor' : 'Sin Conexión a Internet'}
-          </h3>
-          <p className="text-xs text-gray-300 leading-relaxed">
-            {isOnline 
-              ? 'La base de datos de INACAP está tardando más de lo esperado en responder (arranque en frío). Presiona reintentar para intentar conectar nuevamente.'
-              : 'No pudimos conectar con los servicios de Supabase. Esto ocurre comúnmente cuando el celular se desconecta temporalmente de internet al bloquearse.'}
-          </p>
-          <button
-            onClick={loadInitialData}
-            className="btn-primary w-full py-2.5 text-xs font-black uppercase tracking-widest cursor-pointer"
-          >
-            Reintentar Conexión 🔄
-          </button>
-        </div>
-      </main>
-    )
-  }
 
   return (
     <main className="min-h-screen py-8 px-4" style={{ background: 'var(--bg-primary)' }}>

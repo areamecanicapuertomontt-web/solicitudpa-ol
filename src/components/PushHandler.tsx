@@ -41,24 +41,6 @@ export default function PushHandler() {
       localStorage.setItem('app_version', CURRENT_VERSION)
     }
 
-    // 1.3. Limpieza diaria de sesión (Cerrar sesión al comenzar el día si hay sesión activa)
-    const todayStr = new Date().toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })
-    const lastSessionDate = localStorage.getItem('last_session_date')
-
-    if (lastSessionDate && lastSessionDate !== todayStr) {
-      localStorage.setItem('last_session_date', todayStr)
-      supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          console.log(`[PushHandler] Cambio de día detectado (Antes: ${lastSessionDate}, Hoy: ${todayStr}). Cerrando sesión activa para limpieza diaria...`)
-          supabaseBrowser.auth.signOut().catch(() => {}).then(() => {
-            window.location.href = '/login'
-          })
-        }
-      })
-    } else if (!lastSessionDate) {
-      localStorage.setItem('last_session_date', todayStr)
-    }
-
     // 1.2. Limpieza de caché periódica (cada 24 horas) para evitar acumulación de recursos obsoletos
     const ONE_DAY_MS = 24 * 60 * 60 * 1000
     const now = Date.now()
