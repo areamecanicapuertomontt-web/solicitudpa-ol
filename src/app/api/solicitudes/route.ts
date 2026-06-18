@@ -70,16 +70,48 @@ export async function POST(request: NextRequest) {
       console.error('Error insertando items:', itemsErr)
     }
 
-    // 4. Enviar notificación push al DOCENTE asignado
+    // 4. Enviar notificación push al DOCENTE asignado y al ALUMNO (si tiene cuenta)
     try {
+      // Notificación al docente
       await enviarPushNotificacion(
-        docente_id, // ID del docente (user_id en perfiles/auth)
-        'Nueva Solicitud de Material 📋',
-        `El alumno ${alumno} ha ingresado una solicitud para la asignatura ${asignatura}.`,
-        `/panel` // Redirige al panel de solicitudes para que pueda decidir
+        docente_id,
+        'Nueva Solicitud Pendiente 📋',
+        `El alumno ${alumno} ha solicitado herramientas para la asignatura "${asignatura}". Revisa el panel para decidir.`,
+        `/panel`
       )
     } catch (e) {
       console.error('Error enviando notificación push al docente:', e)
+    }
+
+    try {
+      // Buscar perfil del alumno para enviar notificación de confirmación
+      let alumnoUserId: string | null = null
+      const orQuery = []
+      if (alumno_email) orQuery.push(`email.eq.${alumno_email}`)
+      if (rut) orQuery.push(`rut.eq.${rut}`)
+      
+      if (orQuery.length > 0) {
+        const { data: alumnoProfile } = await supabase
+          .from('perfiles')
+          .select('id')
+          .or(orQuery.join(','))
+          .limit(1)
+          .maybeSingle()
+        if (alumnoProfile) {
+          alumnoUserId = alumnoProfile.id
+        }
+      }
+
+      if (alumnoUserId) {
+        await enviarPushNotificacion(
+          alumnoUserId,
+          'Solicitud Recibida 🛠️',
+          `Hola ${alumno.split(' ')[0]}, tu solicitud para "${asignatura}" fue ingresada. Te avisaremos cuando el docente responda.`,
+          `/solicitud/${solicitud.id}/confirmacion`
+        )
+      }
+    } catch (e) {
+      console.error('Error enviando notificación de confirmación al alumno:', e)
     }
 
     return Response.json({ id: solicitud.id, token }, { status: 201 })

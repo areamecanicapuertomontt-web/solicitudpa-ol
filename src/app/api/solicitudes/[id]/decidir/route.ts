@@ -116,8 +116,8 @@ export async function PATCH(
       if (alumnoUserId) {
         enviarPushNotificacion(
           alumnoUserId,
-          'Solicitud de Material Aprobada ✅',
-          `Tu solicitud para la asignatura ${solicitud.asignatura} fue aprobada por el docente. Preséntate en pañol.`,
+          '¡Solicitud Aprobada! ✅',
+          `Tu solicitud para "${solicitud.asignatura}" fue autorizada. Preséntate en el pañol con tu RUT.`,
           `/solicitud/${solicitud.id}/confirmacion`
         ).catch(e => console.error('Error push alumno aprobado:', e))
       }
@@ -133,8 +133,8 @@ export async function PATCH(
         if (panolUserIds.length > 0) {
           enviarPushNotificacion(
             panolUserIds,
-            'Preparar Materiales 📦',
-            `Solicitud aprobada para el alumno ${solicitud.alumno}. Código de Entrega: ${codigoEntrega}.`,
+            'Nuevo Préstamo Autorizado 📦',
+            `Preparar materiales para el alumno ${solicitud.alumno}. Código de Entrega: ${codigoEntrega}.`,
             `/panel`
           ).catch(e => console.error('Error push pañol:', e))
         }
@@ -146,8 +146,8 @@ export async function PATCH(
       if (alumnoUserId) {
         enviarPushNotificacion(
           alumnoUserId,
-          'Solicitud de Material Rechazada ❌',
-          `Tu solicitud para la asignatura ${solicitud.asignatura} fue rechazada.${motivoRechazo ? ` Motivo: "${motivoRechazo}"` : ''}`,
+          'Solicitud Rechazada ❌',
+          `Tu solicitud para "${solicitud.asignatura}" fue rechazada.${motivoRechazo ? ` Motivo: "${motivoRechazo}"` : ' Revisa el detalle para más información.'}`,
           `/solicitud/${solicitud.id}/confirmacion`
         ).catch(e => console.error('Error push alumno rechazado:', e))
       }

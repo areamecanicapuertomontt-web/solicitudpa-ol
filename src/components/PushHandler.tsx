@@ -16,27 +16,28 @@ export default function PushHandler() {
       return
     }
 
-    let isSubscribed = false
+    let lastSubscribedUserId: string | null = null
 
     // Suscribirse a cambios de autenticación en Supabase
     const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange(async (event, session) => {
       console.log(`[PushHandler] Cambio de estado auth: ${event}. Sesión activa:`, !!session)
-      if (session?.user && !isSubscribed) {
-        console.log(`[PushHandler] Usuario autenticado (${session.user.id}). Iniciando suscripción push...`)
-        isSubscribed = true
-        await subscribeToPush(supabaseBrowser, session.user.id)
-      } else if (!session?.user) {
+      const currentId = session?.user?.id
+      if (currentId && currentId !== lastSubscribedUserId) {
+        console.log(`[PushHandler] Usuario autenticado (${currentId}). Iniciando suscripción push...`)
+        lastSubscribedUserId = currentId
+        await subscribeToPush(supabaseBrowser, currentId)
+      } else if (!currentId) {
         console.log('[PushHandler] Sesión cerrada.')
-        isSubscribed = false
+        lastSubscribedUserId = null
       }
     })
 
     // También ejecutar si ya hay sesión activa al montar el componente
     async function checkCurrentUser() {
       const { data: { user } } = await supabaseBrowser.auth.getUser()
-      if (user && !isSubscribed) {
+      if (user && user.id !== lastSubscribedUserId) {
         console.log(`[PushHandler] Sesión activa encontrada (${user.id}). Suscribiendo...`)
-        isSubscribed = true
+        lastSubscribedUserId = user.id
         await subscribeToPush(supabaseBrowser, user.id)
       }
     }

@@ -322,7 +322,25 @@ export default function SolicitudPage() {
   })
 
   async function handleLogout() {
-    await supabaseClient.auth.signOut()
+    try {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration()
+        if (reg) {
+          const sub = await reg.pushManager.getSubscription()
+          if (sub) {
+            await supabaseClient.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error al limpiar suscripción push en logout:', e)
+    }
+
+    try {
+      await supabaseClient.auth.signOut()
+    } catch (err) {
+      console.error('Error al cerrar sesión:', err)
+    }
     window.location.href = '/login'
   }
 

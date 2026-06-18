@@ -156,7 +156,7 @@ export async function PATCH(
         return Response.json({ error: 'Error al actualizar el estado del préstamo' }, { status: 500 })
       }
 
-      // 5. Enviar el correo de alerta con los ítems pendientes
+      // 5. Enviar alertas push con los ítems pendientes al docente y al director
       const { data: solicitudCompleta } = await supabase
         .from('solicitudes')
         .select('*, docente:docentes(*)')
@@ -164,10 +164,29 @@ export async function PATCH(
         .single()
 
       if (solicitudCompleta) {
+        const targetUserIds = [solicitudCompleta.docente_id]
+        
+        // Buscar el perfil del director por su email
+        const directorEmail = process.env.DIRECTOR_CARRERA_EMAIL
+        if (directorEmail) {
+          try {
+            const { data: directorProfile } = await supabase
+              .from('perfiles')
+              .select('id')
+              .eq('email', directorEmail)
+              .maybeSingle()
+            if (directorProfile) {
+              targetUserIds.push(directorProfile.id)
+            }
+          } catch (err) {
+            console.error('Error buscando perfil del director para push:', err)
+          }
+        }
+
         enviarPushNotificacion(
-          solicitudCompleta.docente_id,
-          '⚠️ Alerta: Material pendiente de devolución',
-          `El alumno ${solicitudCompleta.alumno} realizó una devolución parcial. Quedan herramientas pendientes de retornar.`,
+          targetUserIds,
+          '⚠️ Alerta: Material Faltante',
+          `El alumno ${solicitudCompleta.alumno} realizó una devolución parcial. Quedan herramientas pendientes de retornar al pañol.`,
           '/panel'
         ).catch(e => console.error('Error al enviar alerta de material faltante:', e))
       }
