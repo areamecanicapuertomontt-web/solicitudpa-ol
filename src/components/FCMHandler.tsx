@@ -60,7 +60,7 @@ export default function FCMHandler() {
     try {
       // Cargar Firebase dinámicamente en el cliente
       console.log('🔔 [FCMHandler:initFCM] Importando librerías de Firebase dinámicamente...')
-      const { initializeApp, getApps } = await import('firebase/app')
+      const { initializeApp, getApps, getApp } = await import('firebase/app')
       const { getMessaging, getToken, onMessage } = await import('firebase/messaging')
 
       const firebaseConfig = {
@@ -88,7 +88,7 @@ export default function FCMHandler() {
 
       // Inicializar app si no existe
       console.log('🔔 [FCMHandler:initFCM] Inicializando app Firebase...')
-      const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
+      const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp()
       const messaging = getMessaging(app)
       console.log('🔔 [FCMHandler:initFCM] App Firebase y Messaging inicializados correctamente.')
 
