@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase-server'
-import { enviarCorreoAdvertenciaFaltaMaterial } from '@/lib/brevo'
+import { enviarPushNotificacion } from '@/lib/fcm-server'
 import { getJornadaLabel } from '@/lib/utils'
 import { NextRequest } from 'next/server'
 
@@ -164,24 +164,12 @@ export async function PATCH(
         .single()
 
       if (solicitudCompleta) {
-        const docenteEmail = solicitudCompleta.docente?.email
-        const docenteNombre = solicitudCompleta.docente?.nombre || 'Docente'
-        const directorEmail = process.env.DIRECTOR_CARRERA_EMAIL || 'director.mecanica.pttomontt@inacap.cl'
-
-        if (docenteEmail) {
-          enviarCorreoAdvertenciaFaltaMaterial({
-            docenteEmail,
-            docenteNombre,
-            directorEmail,
-            alumnoNombre: solicitudCompleta.alumno,
-            alumnoRut: solicitudCompleta.rut,
-            asignatura: solicitudCompleta.asignatura,
-            seccion: solicitudCompleta.seccion,
-            jornada: getJornadaLabel(solicitudCompleta.jornada),
-            itemsFaltantes: itemsPendientes,
-            solicitudId: solicitudCompleta.id,
-          }).catch(e => console.error('Error al enviar alerta de material faltante:', e))
-        }
+        enviarPushNotificacion(
+          solicitudCompleta.docente_id,
+          '⚠️ Alerta: Material pendiente de devolución',
+          `El alumno ${solicitudCompleta.alumno} realizó una devolución parcial. Quedan herramientas pendientes de retornar.`,
+          '/panel'
+        ).catch(e => console.error('Error al enviar alerta de material faltante:', e))
       }
     }
 

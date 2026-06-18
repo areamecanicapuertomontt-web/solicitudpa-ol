@@ -7,7 +7,7 @@ import {
   Package, Clock, CheckCircle2, XCircle, Truck,
   RefreshCw, Search, Settings, ChevronRight,
   User, BookOpen, Hash, Calendar, KeyRound, X, Wifi, LogOut,
-  AlertCircle, Loader2
+  AlertCircle, Loader2, Check, AlertTriangle, Wrench
 } from 'lucide-react'
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
@@ -276,6 +276,12 @@ export default function PanelPage() {
   const [submittingReturn, setSubmittingReturn] = useState(false)
   const [devolucionError, setDevolucionError] = useState<string | null>(null)
 
+  // ── Docente Decision States ──
+  const [deciding, setDeciding] = useState(false)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
+  const [showRechazoForm, setShowRechazoForm] = useState(false)
+  const [decisionError, setDecisionError] = useState<string | null>(null)
+
   useEffect(() => {
     async function loadProfile() {
       const { data: { user } } = await supabaseBrowser.auth.getUser()
@@ -380,7 +386,7 @@ export default function PanelPage() {
 
   const selected = solicitudes.find(s => s.id === selectedId)
 
-  // Populate return check state
+  // Populate return check state & reset decision state
   useEffect(() => {
     if (selected && selected.items) {
       const initial: { [itemId: string]: boolean } = {}
@@ -395,6 +401,9 @@ export default function PanelPage() {
       setReturnCheck({})
       setDevolucionError(null)
     }
+    setMotivoRechazo('')
+    setShowRechazoForm(false)
+    setDecisionError(null)
   }, [selectedId, selected?.estado])
 
   async function handleRegistrarDevolucion() {
@@ -434,6 +443,46 @@ export default function PanelPage() {
       setDevolucionError('Error de conexión o del servidor')
     } finally {
       setSubmittingReturn(false)
+    }
+  }
+
+  async function handleDecidirDocente(accion: 'aprobar' | 'rechazar') {
+    if (!selected) return
+    setDeciding(true)
+    setDecisionError(null)
+    try {
+      const { data: { session } } = await supabaseBrowser.auth.getSession()
+      if (!session) {
+        setDecisionError('Sesión expirada. Por favor inicia sesión nuevamente.')
+        return
+      }
+
+      const res = await fetch(`/api/solicitudes/${selected.id}/decidir`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          accion,
+          motivoRechazo: accion === 'rechazar' ? motivoRechazo : undefined
+        })
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        setDecisionError(json.error || 'Error al procesar la decisión')
+        return
+      }
+
+      // Éxito: recargar solicitudes y limpiar
+      setShowRechazoForm(false)
+      setMotivoRechazo('')
+      fetchSolicitudes(true)
+    } catch (err: any) {
+      setDecisionError('Error de conexión o del servidor')
+    } finally {
+      setDeciding(false)
     }
   }
 
@@ -500,10 +549,12 @@ export default function PanelPage() {
           <button onClick={() => fetchSolicitudes(false)} className="btn-secondary !px-3 !py-2" title="Actualizar">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
-          <Link href="/admin" className="btn-primary !px-3 !py-2" title="Administración">
-            <Settings size={15} />
-            <span className="text-xs hidden sm:inline">Admin</span>
-          </Link>
+          {profile && (profile.rol === 'ADMIN' || profile.rol === 'PANOL') && (
+            <Link href="/admin" className="btn-primary !px-3 !py-2" title="Administración">
+              <Settings size={15} />
+              <span className="text-xs hidden sm:inline">Admin</span>
+            </Link>
+          )}
           <button
             onClick={handleLogout}
             className="btn-secondary !px-3 !py-2 hover:!text-red-400"
@@ -754,103 +805,232 @@ export default function PanelPage() {
                 </table>
               </div>
 
-              {selected.estado === 'APROBADA' && (
-                <button
-                  onClick={() => setModalSolicitud(selected)}
-                  className="btn-success w-full mt-5 py-3"
-                >
-                  <KeyRound size={16} />
-                  Ingresar Código y Entregar
-                </button>
-              )}
+              {/* ACCIONES DE LA SOLICITUD SEGÚN ROL Y ESTADO */}
 
-              {(selected.estado === 'ENTREGADA' || selected.estado === 'DEVUELTA_INCOMPLETA') && (
-                <div className="mt-5 pt-5 border-t border-white/10 text-xs">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--nacap-red)' }}>
-                      Control de Devolución
-                    </h3>
-                    <span className="text-[10px] text-gray-400">Marcar artículos devueltos</span>
-                  </div>
-                  
-                  <div className="space-y-2 mb-4">
-                    {(selected.items || []).map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          if (item.id && !item.devuelto) {
-                            setReturnCheck(prev => ({ ...prev, [item.id!]: !prev[item.id!] }))
-                          }
-                        }}
-                        className={`flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-white/5 transition-all duration-150 border ${item.devuelto ? 'pointer-events-none opacity-60' : ''}`}
-                        style={{
-                          background: returnCheck[item.id || ''] ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.02)',
-                          borderColor: returnCheck[item.id || ''] ? 'rgba(34,197,94,0.2)' : 'var(--border)'
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={!!returnCheck[item.id || ''] || !!item.devuelto}
-                            disabled={!!item.devuelto}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              if (item.id) {
-                                setReturnCheck(prev => ({ ...prev, [item.id!]: e.target.checked }))
-                              }
-                            }}
-                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 accent-red-600 cursor-pointer"
-                          />
+              {/* 1. Estado PENDIENTE */}
+              {selected.estado === 'PENDIENTE' && (
+                <>
+                  {(profile?.rol === 'DOCENTE' || profile?.rol === 'ADMIN') ? (
+                    <div className="mt-5 pt-5 border-t border-white/10">
+                      <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--nacap-red)' }}>
+                        Decidir sobre Solicitud
+                      </h3>
+                      
+                      {decisionError && (
+                        <div className="p-3 mb-3 rounded-xl flex items-center gap-2 text-xs"
+                          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444' }}>
+                          <AlertCircle size={14} />
+                          <span>{decisionError}</span>
+                        </div>
+                      )}
+
+                      {!showRechazoForm ? (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDecidirDocente('aprobar')}
+                            disabled={deciding}
+                            className="btn-success flex-1 py-3 flex items-center justify-center gap-1.5 cursor-pointer text-sm"
+                          >
+                            {deciding ? (
+                              <Loader2 size={15} className="animate-spin" />
+                            ) : (
+                              <Check size={15} />
+                            )}
+                            Aprobar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowRechazoForm(true)}
+                            disabled={deciding}
+                            className="btn-danger flex-1 py-3 flex items-center justify-center gap-1.5 cursor-pointer text-sm"
+                          >
+                            <X size={15} />
+                            Rechazar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
                           <div>
-                            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{item.descripcion}</p>
-                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cantidad: {item.cantidad}</p>
+                            <label className="label mb-1 text-[11px]">Motivo del rechazo (opcional)</label>
+                            <textarea
+                              rows={2}
+                              value={motivoRechazo}
+                              onChange={(e) => setMotivoRechazo(e.target.value)}
+                              placeholder="Ej: Materiales no corresponden, sección incorrecta..."
+                              className="input-field text-xs resize-none"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDecidirDocente('rechazar')}
+                              disabled={deciding}
+                              className="btn-danger flex-1 py-2 text-xs flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              {deciding && <Loader2 size={12} className="animate-spin" />}
+                              Confirmar Rechazo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowRechazoForm(false)
+                                setMotivoRechazo('')
+                              }}
+                              disabled={deciding}
+                              className="btn-secondary px-3 py-2 text-xs cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
                           </div>
                         </div>
-                        {item.devuelto ? (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-green-500/10 text-green-400 border border-green-500/20">
-                            Devuelto
-                          </span>
-                        ) : (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
-                            Pendiente
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {devolucionError && (
-                    <div className="p-3 mb-4 rounded-xl flex items-center gap-2 text-xs"
-                      style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444' }}>
-                      <AlertCircle size={14} />
-                      <span>{devolucionError}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-5 p-4 rounded-xl text-center border bg-yellow-500/5 border-yellow-500/10">
+                      <Clock size={24} className="mx-auto mb-1.5 text-yellow-500 animate-pulse" />
+                      <p className="text-xs font-bold text-white">Pendiente de Aprobación</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">El docente debe aprobar esta solicitud antes de poder entregarla.</p>
                     </div>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={handleRegistrarDevolucion}
-                    disabled={submittingReturn}
-                    className="btn-primary w-full py-3 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {submittingReturn ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Procesando Devolución...
-                      </>
-                    ) : (
-                      <>Confirmar Devolución</>
-                    )}
-                  </button>
-                </div>
+                </>
               )}
 
+              {/* 2. Estado APROBADA */}
+              {selected.estado === 'APROBADA' && (
+                <>
+                  {profile?.rol !== 'DOCENTE' ? (
+                    <button
+                      onClick={() => setModalSolicitud(selected)}
+                      className="btn-success w-full mt-5 py-3"
+                    >
+                      <KeyRound size={16} />
+                      Ingresar Código y Entregar
+                    </button>
+                  ) : (
+                    <div className="mt-5 p-4 rounded-xl text-center border bg-yellow-500/5 border-yellow-500/10">
+                      <Clock size={24} className="mx-auto mb-1.5 text-yellow-500 animate-pulse" />
+                      <p className="text-xs font-bold text-white">Solicitud Aprobada</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Esperando que el alumno retire las herramientas en el pañol.</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 3. Estado ENTREGADA o DEVUELTA_INCOMPLETA */}
+              {(selected.estado === 'ENTREGADA' || selected.estado === 'DEVUELTA_INCOMPLETA') && (
+                <>
+                  {profile?.rol !== 'DOCENTE' ? (
+                    <div className="mt-5 pt-5 border-t border-white/10 text-xs">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--nacap-red)' }}>
+                          Control de Devolución
+                        </h3>
+                        <span className="text-[10px] text-gray-400">Marcar artículos devueltos</span>
+                      </div>
+                      
+                      <div className="space-y-2 mb-4">
+                        {(selected.items || []).map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => {
+                              if (item.id && !item.devuelto) {
+                                setReturnCheck(prev => ({ ...prev, [item.id!]: !prev[item.id!] }))
+                              }
+                            }}
+                            className={`flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-white/5 transition-all duration-150 border ${item.devuelto ? 'pointer-events-none opacity-60' : ''}`}
+                            style={{
+                              background: returnCheck[item.id || ''] ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.02)',
+                              borderColor: returnCheck[item.id || ''] ? 'rgba(34,197,94,0.2)' : 'var(--border)'
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={!!returnCheck[item.id || ''] || !!item.devuelto}
+                                disabled={!!item.devuelto}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  if (item.id) {
+                                    setReturnCheck(prev => ({ ...prev, [item.id!]: e.target.checked }))
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 accent-red-600 cursor-pointer"
+                              />
+                              <div>
+                                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{item.descripcion}</p>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cantidad: {item.cantidad}</p>
+                              </div>
+                            </div>
+                            {item.devuelto ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-green-500/10 text-green-400 border border-green-500/20">
+                                Devuelto
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
+                                Pendiente
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {devolucionError && (
+                        <div className="p-3 mb-4 rounded-xl flex items-center gap-2 text-xs"
+                          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444' }}>
+                          <AlertCircle size={14} />
+                          <span>{devolucionError}</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleRegistrarDevolucion}
+                        disabled={submittingReturn}
+                        className="btn-primary w-full py-3 flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {submittingReturn ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            Procesando Devolución...
+                          </>
+                        ) : (
+                          <>Confirmar Devolución</>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-5 p-4 rounded-xl text-center border bg-blue-500/5 border-blue-500/10">
+                      <Wrench size={24} className="mx-auto mb-1.5 text-blue-400" />
+                      <p className="text-xs font-bold text-white">{selected.estado === 'ENTREGADA' ? 'Materiales en Uso' : 'Devolución Incompleta'}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {selected.estado === 'ENTREGADA'
+                          ? 'El alumno tiene las herramientas en su posesión.'
+                          : 'El alumno no ha devuelto la totalidad de las herramientas.'}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 4. Estado DEVUELTA */}
               {selected.estado === 'DEVUELTA' && (
                 <div className="mt-5 pt-5 border-t border-white/10 text-center p-4 rounded-xl"
                   style={{ background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.1)' }}>
                   <CheckCircle2 size={32} className="mx-auto mb-2 text-green-500" />
                   <p className="text-sm font-bold text-white">Devolución Completada</p>
                   <p className="text-xs text-gray-400 mt-1">Todos los materiales han sido devueltos en su totalidad.</p>
+                </div>
+              )}
+
+              {/* 5. Estado RECHAZADA */}
+              {selected.estado === 'RECHAZADA' && (
+                <div className="mt-5 p-4 rounded-xl text-center border bg-red-500/5 border-red-500/10">
+                  <XCircle size={24} className="mx-auto mb-2 text-red-500" />
+                  <p className="text-sm font-bold text-white">Solicitud Rechazada</p>
+                  {selected.observaciones && (
+                    <p className="text-[11px] text-gray-400 mt-1 italic">"{selected.observaciones}"</p>
+                  )}
                 </div>
               )}
             </div>

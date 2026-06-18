@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, Mail } from 'lucide-react'
+import { CheckCircle2, Clock, Bell } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function ConfirmacionPage({
@@ -45,14 +45,14 @@ export default async function ConfirmacionPage({
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                 style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
-                <Mail size={16} />
+                <Bell size={16} />
               </div>
               <div>
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                   Notificación al docente
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Tu docente recibió un correo con los detalles. Deberá aprobar la solicitud.
+                  Tu docente recibió una notificación push con los detalles. Deberá aprobar la solicitud.
                 </p>
               </div>
             </div>

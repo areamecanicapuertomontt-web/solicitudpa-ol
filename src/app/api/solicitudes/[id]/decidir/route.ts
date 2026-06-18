@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase-server'
-import { enviarCorreoPanol, enviarCorreoAlumnoResultado } from '@/lib/brevo'
+import { enviarPushNotificacion } from '@/lib/fcm-server'
 import { formatFecha, getJornadaLabel } from '@/lib/utils'
 import { NextRequest } from 'next/server'
 
@@ -86,70 +86,70 @@ export async function PATCH(
       return Response.json({ error: 'Error al actualizar el estado de la solicitud' }, { status: 500 })
     }
 
-    // 8. Enviar correos en segundo plano (no bloqueante)
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    // 8. Enviar notificaciones push en segundo plano (FCM)
     const docenteNombre = solicitud.docente?.nombre || perf.nombre
 
-    // Alumno resultado
-    if (solicitud.alumno_email) {
-      enviarCorreoAlumnoResultado({
-        alumnoEmail: solicitud.alumno_email,
-        alumnoNombre: solicitud.alumno,
-        aprobada: accion === 'aprobar',
-        docenteNombre,
-        asignatura: solicitud.asignatura,
-        items: solicitud.items || [],
-        motivoRechazo: accion === 'rechazar' ? motivoRechazo : undefined,
-      }).catch(e => console.error('Error correo resultado alumno:', e))
+    // Buscamos el ID del alumno en la tabla perfiles
+    let alumnoUserId: string | null = null
+    try {
+      const orQuery = []
+      if (solicitud.alumno_email) orQuery.push(`email.eq.${solicitud.alumno_email}`)
+      if (solicitud.rut) orQuery.push(`rut.eq.${solicitud.rut}`)
+      
+      if (orQuery.length > 0) {
+        const { data: alumnoProfile } = await supabase
+          .from('perfiles')
+          .select('id')
+          .or(orQuery.join(','))
+          .limit(1)
+          .maybeSingle()
+        if (alumnoProfile) {
+          alumnoUserId = alumnoProfile.id
+        }
+      }
+    } catch (err) {
+      console.error('Error buscando perfil de alumno:', err)
     }
 
-    // Al Pañol si es aprobada
     if (accion === 'aprobar' && codigoEntrega) {
+      // 1. Notificación al Alumno
+      if (alumnoUserId) {
+        enviarPushNotificacion(
+          alumnoUserId,
+          'Solicitud de Material Aprobada ✅',
+          `Tu solicitud para la asignatura ${solicitud.asignatura} fue aprobada por el docente. Preséntate en pañol.`,
+          `/solicitud/${solicitud.id}/confirmacion`
+        ).catch(e => console.error('Error push alumno aprobado:', e))
+      }
+
+      // 2. Notificación a Pañoleros y Admins
       try {
-        // Consultar pañoleros registrados que coincidan con la jornada de la solicitud
         const { data: perfilesPanol } = await supabase
           .from('perfiles')
-          .select('email, nombre, jornada')
+          .select('id')
           .in('rol', ['PANOL', 'ADMIN'])
-
-        let targetPanoleros = (perfilesPanol || []).filter(
-          p => p.jornada === solicitud.jornada
-        )
-
-        // Si no hay pañoleros específicos para esa jornada, enviar a todos los pañoleros/admins
-        if (targetPanoleros.length === 0) {
-          targetPanoleros = perfilesPanol || []
+        
+        const panolUserIds = (perfilesPanol || []).map(p => p.id)
+        if (panolUserIds.length > 0) {
+          enviarPushNotificacion(
+            panolUserIds,
+            'Preparar Materiales 📦',
+            `Solicitud aprobada para el alumno ${solicitud.alumno}. Código de Entrega: ${codigoEntrega}.`,
+            `/panel`
+          ).catch(e => console.error('Error push pañol:', e))
         }
-
-        // Si la tabla perfiles está vacía o no hay pañoleros, usar el de respaldo de .env.local
-        if (targetPanoleros.length === 0) {
-          targetPanoleros = [{
-            email: process.env.PANOL_EMAIL || 'diegohen2005gonzales@gmail.com',
-            nombre: 'Pañol Mecánica',
-            jornada: solicitud.jornada
-          }]
-        }
-
-        // Enviar correos a todos los pañoleros seleccionados en paralelo
-        await Promise.all(
-          targetPanoleros.map(p =>
-            enviarCorreoPanol({
-              pañolEmail: p.email,
-              alumnoNombre: solicitud.alumno,
-              alumnoRut: solicitud.rut,
-              docenteNombre,
-              asignatura: solicitud.asignatura,
-              seccion: solicitud.seccion,
-              jornada: getJornadaLabel(solicitud.jornada),
-              fecha: formatFecha(solicitud.fecha),
-              items: solicitud.items || [],
-              solicitudId: solicitud.id,
-              codigoEntrega,
-            })
-          )
-        )
-      } catch (e) {
-        console.error('Error al enviar correos a los pañoleros:', e)
+      } catch (err) {
+        console.error('Error enviando notificaciones push a pañoleros:', err)
+      }
+    } else if (accion === 'rechazar') {
+      // Notificación al Alumno del rechazo
+      if (alumnoUserId) {
+        enviarPushNotificacion(
+          alumnoUserId,
+          'Solicitud de Material Rechazada ❌',
+          `Tu solicitud para la asignatura ${solicitud.asignatura} fue rechazada.${motivoRechazo ? ` Motivo: "${motivoRechazo}"` : ''}`,
+          `/solicitud/${solicitud.id}/confirmacion`
+        ).catch(e => console.error('Error push alumno rechazado:', e))
       }
     }
 

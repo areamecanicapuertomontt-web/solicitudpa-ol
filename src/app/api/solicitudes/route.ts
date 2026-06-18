@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase-server'
-import { enviarCorreoDocente, enviarCorreoAlumnoConfirmacion } from '@/lib/brevo'
+import { enviarPushNotificacion } from '@/lib/fcm-server'
 import { formatFecha, getJornadaLabel } from '@/lib/utils'
 import { NextRequest } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
@@ -70,47 +70,16 @@ export async function POST(request: NextRequest) {
       console.error('Error insertando items:', itemsErr)
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-    const jornadaLabel = getJornadaLabel(jornada)
-    const fechaLabel = formatFecha(fechaSolicitud)
-
-    // 4. Enviar correo al DOCENTE
+    // 4. Enviar notificación push al DOCENTE asignado
     try {
-      await enviarCorreoDocente({
-        docenteEmail: docente.email,
-        docenteNombre: docente.nombre,
-        alumnoNombre: alumno,
-        alumnoRut: rut,
-        asignatura,
-        seccion,
-        jornada: jornadaLabel,
-        fecha: fechaLabel,
-        items,
-        tokenAprobacion: token,
-        solicitudId: solicitud.id,
-        siteUrl,
-      })
+      await enviarPushNotificacion(
+        docente_id, // ID del docente (user_id en perfiles/auth)
+        'Nueva Solicitud de Material 📋',
+        `El alumno ${alumno} ha ingresado una solicitud para la asignatura ${asignatura}.`,
+        `/panel` // Redirige al panel de solicitudes para que pueda decidir
+      )
     } catch (e) {
-      console.error('Error enviando correo al docente:', e)
-    }
-
-    // 5. Enviar correo de CONFIRMACIÓN al ALUMNO
-    if (alumno_email) {
-      try {
-        await enviarCorreoAlumnoConfirmacion({
-          alumnoEmail: alumno_email,
-          alumnoNombre: alumno,
-          alumnoRut: rut,
-          docenteNombre: docente.nombre,
-          asignatura,
-          seccion,
-          jornada: jornadaLabel,
-          fecha: fechaLabel,
-          items,
-        })
-      } catch (e) {
-        console.error('Error enviando correo de confirmación al alumno:', e)
-      }
+      console.error('Error enviando notificación push al docente:', e)
     }
 
     return Response.json({ id: solicitud.id, token }, { status: 201 })
