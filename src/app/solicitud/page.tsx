@@ -211,19 +211,43 @@ export default function SolicitudPage() {
       setAsignaturas(asignaturasData)
     }
 
-    // Aumentar a 8 segundos para evitar falsos positivos en conexiones lentas o arranques en frío
-    const timeoutPromise = new Promise<any>((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout de carga (8s)')), 8000)
-    )
+    const maxRetries = 3
+    let attempt = 0
+    let success = false
+    let lastError = null
 
-    try {
-      await Promise.race([runLoading(), timeoutPromise])
-    } catch (err: any) {
-      console.error('Error al cargar datos iniciales en Alumno page:', err)
-      setInitialDataError('Error de conexión con la base de datos INACAP. Revisa tu internet e intenta de nuevo.')
-    } finally {
-      setLoadingInitialData(false)
+    while (attempt < maxRetries && !success) {
+      attempt++
+      console.log(`[loadInitialData] Intento ${attempt} de ${maxRetries}...`)
+
+      // Aumentar a 15 segundos para evitar falsos positivos en cold starts de Vercel
+      const timeoutPromise = new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout de carga en intento ${attempt} (15s)`)), 15000)
+      )
+
+      try {
+        await Promise.race([runLoading(), timeoutPromise])
+        success = true
+        console.log(`[loadInitialData] ✅ Intento ${attempt} exitoso.`)
+      } catch (err: any) {
+        lastError = err
+        console.warn(`[loadInitialData] ❌ Intento ${attempt} falló:`, err.message || err)
+        
+        if (attempt < maxRetries) {
+          // Esperar 2 segundos antes del siguiente intento
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
     }
+
+    if (!success) {
+      console.error('Error definitivo al cargar datos iniciales en Alumno page:', lastError)
+      setInitialDataError('Error al conectar con la base de datos INACAP.')
+    } else {
+      setInitialDataError(null)
+    }
+
+    setLoadingInitialData(false)
   }
 
   // 3. Ejecutar carga inicial en montaje
@@ -414,15 +438,20 @@ export default function SolicitudPage() {
   }
 
   if (initialDataError) {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
     return (
       <main className="min-h-screen py-8 px-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
         <div className="max-w-md w-full bg-[#1B2838] border border-white/5 p-6 rounded-2xl shadow-xl text-center space-y-4 animate-fade-in">
           <div className="flex justify-center text-red-500">
             <AlertCircle size={40} />
           </div>
-          <h3 className="text-base font-black uppercase tracking-wider text-white">Error de Conexión</h3>
+          <h3 className="text-base font-black uppercase tracking-wider text-white">
+            {isOnline ? 'Error de Servidor' : 'Sin Conexión a Internet'}
+          </h3>
           <p className="text-xs text-gray-300 leading-relaxed">
-            No pudimos conectar con los servicios de Supabase. Esto ocurre comúnmente cuando el celular se desconecta temporalmente del internet al bloquearse.
+            {isOnline 
+              ? 'La base de datos de INACAP está tardando más de lo esperado en responder (arranque en frío). Presiona reintentar para intentar conectar nuevamente.'
+              : 'No pudimos conectar con los servicios de Supabase. Esto ocurre comúnmente cuando el celular se desconecta temporalmente de internet al bloquearse.'}
           </p>
           <button
             onClick={loadInitialData}
