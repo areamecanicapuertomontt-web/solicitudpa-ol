@@ -116,6 +116,7 @@ export default function AdminPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [profile, setProfile] = useState<any>(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
   
   // Data lists
   const [docentes, setDocentes] = useState<Docente[]>([])
@@ -201,32 +202,96 @@ export default function AdminPage() {
 
   // Load User Profile
   useEffect(() => {
-    async function loadProfile() {
-      const { data: { user } } = await supabaseBrowser.auth.getUser()
-      if (!user) {
-        router.replace('/login')
-        return
-      }
+    let active = true
 
-      let perf = null
-      try {
-        const { data } = await supabaseBrowser
-          .from('perfiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        perf = data
-      } catch (e) {
-        console.error("Error loading profile:", e)
+    async function fetchProfile(user: any) {
+      if (!user) return
+      const { data, error } = await supabaseBrowser
+        .from('perfiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      
+      if (active) {
+        if (!error && data) {
+          if (data.rol !== 'ADMIN' && data.rol !== 'PANOL') {
+            router.replace('/login')
+          } else {
+            setProfile(data)
+            setLoadingProfile(false)
+          }
+        } else {
+          console.warn("Error al cargar perfil admin en primer intento, usando fallback temporal:", error)
+          // Fallback temporal usando metadata de auth
+          const fallbackPerf = {
+            id: user.id,
+            email: user.email,
+            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
+            rol: user.user_metadata?.rol || 'PANOL',
+            rut: user.user_metadata?.rut || '',
+          }
+          
+          if (fallbackPerf.rol !== 'ADMIN' && fallbackPerf.rol !== 'PANOL') {
+            router.replace('/login')
+          } else {
+            setProfile(fallbackPerf)
+            
+            // Reintentar en 1.2 segundos por si RLS estaba esperando la sincronización del token
+            setTimeout(async () => {
+              if (!active) return
+              console.log("Reintentando cargar perfil admin desde perfiles...")
+              const { data: retryData, error: retryErr } = await supabaseBrowser
+                .from('perfiles')
+                .select('*')
+                .eq('id', user.id)
+                .single()
+              if (!retryErr && retryData) {
+                if (retryData.rol !== 'ADMIN' && retryData.rol !== 'PANOL') {
+                  router.replace('/login')
+                } else {
+                  setProfile(retryData)
+                }
+              }
+              setLoadingProfile(false)
+            }, 1200)
+          }
+        }
       }
-
-      if (!perf || (perf.rol !== 'ADMIN' && perf.rol !== 'PANOL')) {
-        router.replace('/login')
-        return
-      }
-      setProfile(perf)
     }
-    loadProfile()
+
+    const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[AdminPage] Evento Auth: ${event}`)
+      if (session?.user) {
+        await fetchProfile(session.user)
+      } else if (event === 'SIGNED_OUT') {
+        router.replace('/login')
+      }
+    })
+
+    // Chequeo inicial
+    supabaseBrowser.auth.getUser().then(({ data: { user } }) => {
+      if (active) {
+        if (user) {
+          fetchProfile(user)
+        } else {
+          // Esperar un momento breve para ver si se restaura la sesión
+          setTimeout(() => {
+            if (active) {
+              supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
+                if (!session) {
+                  router.replace('/login')
+                }
+              })
+            }
+          }, 1500)
+        }
+      }
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
   }, [router])
 
   // Main fetch function
@@ -680,6 +745,19 @@ export default function AdminPage() {
       docentesActivos: docentes.filter(d => d.activo).length
     }
   }, [solicitudes, docentes])
+
+  if (loadingProfile) {
+    return (
+      <main className="min-h-screen py-8 px-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="max-w-md w-full text-center space-y-4">
+          <div className="flex justify-center">
+            <span className="w-10 h-10 border-4 border-white/20 border-t-red-600 rounded-full animate-spin" />
+          </div>
+          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest animate-pulse">Verificando credenciales de administrador...</p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen py-8 px-4 sm:px-6" style={{ background: 'var(--bg-primary)' }}>

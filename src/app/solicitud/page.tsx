@@ -156,11 +156,12 @@ export default function SolicitudPage() {
     }
   }
 
-  // 2. Función unificada de carga de datos iniciales con soporte de reintentos
+  // 2. Función unificada de carga de datos iniciales con soporte de reintentos y tiempo de espera máximo
   const loadInitialData = async () => {
     setLoadingInitialData(true)
     setInitialDataError(null)
-    try {
+
+    const runLoading = async () => {
       // A. Cargar docentes
       const docRes = await fetch('/api/docentes')
       if (!docRes.ok) throw new Error('Error de red al cargar docentes')
@@ -197,7 +198,15 @@ export default function SolicitudPage() {
 
       // D. Cargar perfil
       await loadProfile()
+    }
 
+    // Si tarda más de 5 segundos, cancelar y mostrar el botón de reintentar
+    const timeoutPromise = new Promise<any>((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout de carga (5s)')), 5000)
+    )
+
+    try {
+      await Promise.race([runLoading(), timeoutPromise])
     } catch (err: any) {
       console.error('Error al cargar datos iniciales en Alumno page:', err)
       setInitialDataError('Error de conexión con la base de datos INACAP. Revisa tu internet e intenta de nuevo.')

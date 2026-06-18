@@ -602,6 +602,7 @@ export default function PanelPage() {
   const [isLive, setIsLive] = useState(false)
   const [profile, setProfile] = useState<any>(null)
   const [reenviando, setReenviando] = useState<string | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
 
   // ── Pagination States ──
   const itemsPerPage = 10
@@ -625,37 +626,87 @@ export default function PanelPage() {
   const [decisionError, setDecisionError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function loadProfile() {
-      const { data: { user } } = await supabaseBrowser.auth.getUser()
-      if (user) {
-        let perf = null
-        try {
-          const { data } = await supabaseBrowser
-            .from('perfiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-          perf = data
-        } catch (e) {
-          console.error("Error loading profile from perfiles table:", e)
-        }
+    let active = true
 
-        if (!perf) {
-          perf = {
+    async function fetchProfile(user: any) {
+      if (!user) return
+      const { data, error } = await supabaseBrowser
+        .from('perfiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      
+      if (active) {
+        if (!error && data) {
+          setProfile(data)
+          setLoadingProfile(false)
+        } else {
+          console.warn("Error al cargar perfil en primer intento, usando fallback temporal:", error)
+          // Fallback temporal usando metadata de auth
+          const fallbackPerf = {
             id: user.id,
             email: user.email,
-            nombre: user.user_metadata?.nombre || 'Pañolero Inacap',
+            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
             rol: user.user_metadata?.rol || 'PANOL',
             rut: user.user_metadata?.rut || '',
             jornada: user.user_metadata?.jornada || 'D',
             seccion: user.user_metadata?.seccion || '',
           }
+          setProfile(fallbackPerf)
+          
+          // Reintentar en 1.2 segundos por si RLS estaba esperando la sincronización del token
+          setTimeout(async () => {
+            if (!active) return
+            console.log("Reintentando cargar perfil desde la tabla perfiles...")
+            const { data: retryData, error: retryErr } = await supabaseBrowser
+              .from('perfiles')
+              .select('*')
+              .eq('id', user.id)
+              .single()
+            if (!retryErr && retryData) {
+              console.log("✅ Perfil cargado exitosamente en reintento.")
+              setProfile(retryData)
+            }
+            setLoadingProfile(false)
+          }, 1200)
         }
-        setProfile(perf)
       }
     }
-    loadProfile()
-  }, [])
+
+    const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[PanelPage] Evento Auth: ${event}`)
+      if (session?.user) {
+        await fetchProfile(session.user)
+      } else if (event === 'SIGNED_OUT') {
+        router.replace('/login')
+      }
+    })
+
+    // Chequeo inicial
+    supabaseBrowser.auth.getUser().then(({ data: { user } }) => {
+      if (active) {
+        if (user) {
+          fetchProfile(user)
+        } else {
+          // Esperar un momento breve para ver si se restaura la sesión
+          setTimeout(() => {
+            if (active) {
+              supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
+                if (!session) {
+                  router.replace('/login')
+                }
+              })
+            }
+          }, 1500)
+        }
+      }
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [router])
 
   async function handleLogout() {
     try {
@@ -882,6 +933,19 @@ export default function PanelPage() {
     aprobadas:  solicitudes.filter(s => s.estado === 'APROBADA').length,
     entregadas: solicitudes.filter(s => s.estado === 'ENTREGADA' || s.estado === 'DEVUELTA_INCOMPLETA').length,
     devueltas:  solicitudes.filter(s => s.estado === 'DEVUELTA').length,
+  }
+
+  if (loadingProfile) {
+    return (
+      <main className="min-h-screen py-8 px-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="max-w-md w-full text-center space-y-4">
+          <div className="flex justify-center">
+            <span className="w-10 h-10 border-4 border-white/20 border-t-red-600 rounded-full animate-spin" />
+          </div>
+          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest animate-pulse">Cargando tu perfil...</p>
+        </div>
+      </main>
+    )
   }
 
   // ── Si el usuario es DOCENTE, mostrar su vista dedicada ──────────────────
