@@ -7,7 +7,7 @@ import {
   Package, Clock, CheckCircle2, XCircle, Truck,
   RefreshCw, Search, Settings, ChevronRight,
   User, BookOpen, Hash, Calendar, KeyRound, X, Wifi, LogOut,
-  AlertCircle, Loader2, Check, AlertTriangle, Wrench
+  AlertCircle, Loader2, Check, AlertTriangle, Wrench, Bell, History, GraduationCap
 } from 'lucide-react'
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
@@ -246,6 +246,343 @@ function ModalCodigo({
         </button>
       </div>
     </div>
+  )
+}
+
+// ─── Vista dedicada para el ROL DOCENTE ─────────────────────────────────────
+function DocenteView({
+  profile,
+  onLogout,
+}: {
+  profile: any
+  onLogout: () => void
+}) {
+  const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'pendientes' | 'historial'>('pendientes')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [deciding, setDeciding] = useState(false)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
+  const [showRechazoForm, setShowRechazoForm] = useState(false)
+  const [decisionError, setDecisionError] = useState<string | null>(null)
+  const [isLive, setIsLive] = useState(false)
+
+  const fetchSolicitudes = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const res = await fetch('/api/panel')
+      const data = await res.json()
+      setSolicitudes(data.solicitudes || [])
+    } catch {
+      if (!silent) setSolicitudes([])
+    } finally {
+      if (!silent) setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchSolicitudes() }, [fetchSolicitudes])
+
+  // Realtime
+  useEffect(() => {
+    const channel = supabaseBrowser
+      .channel('docente-solicitudes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, () => fetchSolicitudes(true))
+      .subscribe(status => setIsLive(status === 'SUBSCRIBED'))
+    return () => { supabaseBrowser.removeChannel(channel) }
+  }, [fetchSolicitudes])
+
+  const pendientes = solicitudes.filter(s => s.estado === 'PENDIENTE')
+  const historial  = solicitudes.filter(s => s.estado !== 'PENDIENTE')
+  const lista = tab === 'pendientes' ? pendientes : historial
+  const selected = solicitudes.find(s => s.id === selectedId)
+
+  async function handleDecidir(accion: 'aprobar' | 'rechazar') {
+    if (!selected) return
+    setDeciding(true)
+    setDecisionError(null)
+    try {
+      const { data: { session } } = await supabaseBrowser.auth.getSession()
+      if (!session) { setDecisionError('Sesión expirada'); return }
+      const res = await fetch(`/api/solicitudes/${selected.id}/decidir`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ accion, motivoRechazo: accion === 'rechazar' ? motivoRechazo : undefined }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setDecisionError(json.error || 'Error'); return }
+      setSelectedId(null)
+      setShowRechazoForm(false)
+      setMotivoRechazo('')
+      fetchSolicitudes(true)
+    } catch { setDecisionError('Error de conexión') }
+    finally { setDeciding(false) }
+  }
+
+  return (
+    <main className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+      {/* Header */}
+      <header className="glass sticky top-0 z-30 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-8 rounded-full" style={{ background: 'var(--nacap-red)' }} />
+          <div>
+            <p className="text-xs font-bold tracking-widest uppercase" style={{ color: 'var(--nacap-red)' }}>Área Mecánica</p>
+            <h1 className="text-base font-black leading-none" style={{ color: 'var(--text-primary)' }}>Portal Docente</h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Nombre */}
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/5" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <GraduationCap size={14} style={{ color: 'var(--nacap-red)' }} />
+            <span className="text-xs font-bold">{profile.nombre}</span>
+          </div>
+          {/* En vivo */}
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: isLive ? 'rgba(34,197,94,0.12)' : 'rgba(96,165,250,0.10)' }}>
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: isLive ? '#22C55E' : '#60A5FA' }} />
+            <span className="text-xs font-semibold hidden sm:inline" style={{ color: isLive ? '#22C55E' : '#60A5FA' }}>{isLive ? 'En vivo' : 'Auto'}</span>
+          </div>
+          <button onClick={() => fetchSolicitudes(false)} className="btn-secondary !px-3 !py-2" title="Actualizar">
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={onLogout} className="btn-secondary !px-3 !py-2 hover:!text-red-400" title="Cerrar Sesión">
+            <LogOut size={15} />
+          </button>
+        </div>
+      </header>
+
+      <div className="max-w-4xl mx-auto px-4 py-6">
+
+        {/* Bienvenida */}
+        <div className="card p-5 mb-6 relative overflow-hidden animate-fade-in" style={{ background: 'linear-gradient(135deg, rgba(230,57,70,0.12) 0%, rgba(17,34,64,0.6) 100%)', borderColor: 'rgba(230,57,70,0.2)' }}>
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
+            <GraduationCap size={96} />
+          </div>
+          <p className="text-xs font-bold tracking-wider uppercase text-red-400 mb-1">Panel Docente</p>
+          <h2 className="text-2xl font-black" style={{ color: 'var(--text-primary)' }}>¡Hola, {profile.nombre.split(' ')[0]}! 👋</h2>
+          <p className="text-xs mt-1.5 text-gray-400">
+            {pendientes.length > 0
+              ? <><span className="text-white font-bold">{pendientes.length} solicitud{pendientes.length > 1 ? 'es' : ''}</span> esperan tu decisión de aprobación.</>  
+              : 'No tienes solicitudes pendientes de decisión. ¡Todo al día! ✅'}
+          </p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-5">
+          <button
+            onClick={() => { setTab('pendientes'); setSelectedId(null) }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all"
+            style={tab === 'pendientes'
+              ? { background: 'var(--nacap-red)', color: 'white' }
+              : { background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}
+          >
+            <Bell size={14} />
+            Por decidir
+            {pendientes.length > 0 && (
+              <span className="w-5 h-5 rounded-full text-xs font-black flex items-center justify-center" style={{ background: tab === 'pendientes' ? 'rgba(255,255,255,0.3)' : 'var(--nacap-red)', color: 'white' }}>
+                {pendientes.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setTab('historial'); setSelectedId(null) }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all"
+            style={tab === 'historial'
+              ? { background: 'var(--nacap-red)', color: 'white' }
+              : { background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}
+          >
+            <History size={14} />
+            Historial
+            <span className="text-xs opacity-60">({historial.length})</span>
+          </button>
+        </div>
+
+        {/* Lista + Detalle */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* Lista */}
+          <div className="space-y-3">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => <div key={i} className="card h-28 animate-pulse" />)
+            ) : lista.length === 0 ? (
+              <div className="card p-10 text-center">
+                {tab === 'pendientes' ? (
+                  <>
+                    <CheckCircle2 size={36} className="mx-auto mb-3 text-green-500" />
+                    <p className="font-bold" style={{ color: 'var(--text-primary)' }}>Sin solicitudes pendientes</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>No hay solicitudes esperando tu aprobación.</p>
+                  </>
+                ) : (
+                  <>
+                    <History size={36} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
+                    <p style={{ color: 'var(--text-secondary)' }}>Sin historial aún</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              lista.map(sol => (
+                <div
+                  key={sol.id}
+                  onClick={() => setSelectedId(sol.id === selectedId ? null : sol.id)}
+                  className="card p-4 cursor-pointer transition-all duration-200 hover:scale-[1.01]"
+                  style={selectedId === sol.id ? { outline: '2px solid var(--nacap-red)', outlineOffset: '0px' } : {}}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <User size={13} style={{ color: 'var(--text-muted)' }} />
+                        <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{sol.alumno}</p>
+                        {sol.carrera && <span className="text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0" style={{ background: 'rgba(220,38,38,0.2)', color: '#f87171' }}>{sol.carrera}</span>}
+                      </div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Hash size={12} style={{ color: 'var(--text-muted)' }} />
+                        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{sol.rut}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <BookOpen size={12} style={{ color: 'var(--text-muted)' }} />
+                        <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{sol.asignatura} — {sol.seccion} ({getJornadaLabel(sol.jornada)})</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <BadgeEstado estado={sol.estado} />
+                      <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {(sol.items || []).slice(0, 3).map((item, i) => (
+                      <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
+                        {item.cantidad}× {item.descripcion}
+                      </span>
+                    ))}
+                    {(sol.items?.length || 0) > 3 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>+{(sol.items?.length || 0) - 3} más</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Calendar size={11} style={{ color: 'var(--text-muted)' }} />
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{formatFechaHora(sol.created_at)}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Detalle */}
+          {selected && (
+            <div className="card p-5 animate-fade-in lg:sticky lg:top-24 lg:self-start">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setSelectedId(null)} className="p-1 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-all">
+                    <X size={16} />
+                  </button>
+                  <h2 className="font-black text-lg" style={{ color: 'var(--text-primary)' }}>Detalle</h2>
+                </div>
+                <BadgeEstado estado={selected.estado} />
+              </div>
+
+              <div className="space-y-3 mb-5">
+                {[
+                  { icon: <User size={14} />,     label: 'Alumno',    value: selected.alumno },
+                  { icon: <Hash size={14} />,     label: 'RUT',       value: selected.rut },
+                  { icon: <BookOpen size={14} />, label: 'Asignatura',value: selected.asignatura },
+                  { icon: <BookOpen size={14} />, label: 'Sección',   value: `${selected.seccion} — ${getJornadaLabel(selected.jornada)}` },
+                  { icon: <Calendar size={14} />, label: 'Fecha',     value: formatFechaHora(selected.created_at) },
+                ].map(item => (
+                  <div key={item.label} className="flex items-center gap-3 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{item.icon}</span>
+                    <span className="text-xs w-24 flex-shrink-0" style={{ color: 'var(--text-muted)' }}>{item.label}</span>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{item.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary)' }}>Materiales solicitados</h3>
+              <div className="rounded-xl overflow-hidden mb-5" style={{ border: '1px solid var(--border)' }}>
+                <table className="nacap-table">
+                  <thead><tr><th>Cant.</th><th>Descripción</th><th>Estado</th></tr></thead>
+                  <tbody>
+                    {(selected.items || []).map((item, i) => (
+                      <tr key={i}>
+                        <td className="text-center font-black" style={{ color: 'var(--nacap-red)' }}>{item.cantidad}</td>
+                        <td className="font-medium">{item.descripcion}</td>
+                        <td><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>{item.estado_item}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Acciones solo en PENDIENTE */}
+              {selected.estado === 'PENDIENTE' && (
+                <div className="pt-4 border-t border-white/10">
+                  <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--nacap-red)' }}>Tu Decisión</h3>
+
+                  {decisionError && (
+                    <div className="p-3 mb-3 rounded-xl flex items-center gap-2 text-xs" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444' }}>
+                      <AlertCircle size={14} /><span>{decisionError}</span>
+                    </div>
+                  )}
+
+                  {!showRechazoForm ? (
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => handleDecidir('aprobar')} disabled={deciding}
+                        className="btn-success flex-1 py-3 flex items-center justify-center gap-1.5 cursor-pointer">
+                        {deciding ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                        Aprobar ✅
+                      </button>
+                      <button type="button" onClick={() => setShowRechazoForm(true)} disabled={deciding}
+                        className="btn-danger flex-1 py-3 flex items-center justify-center gap-1.5 cursor-pointer">
+                        <X size={15} /> Rechazar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="label mb-1 text-[11px]">Motivo del rechazo (opcional)</label>
+                        <textarea rows={2} value={motivoRechazo} onChange={e => setMotivoRechazo(e.target.value)}
+                          placeholder="Ej: Materiales no corresponden, sección incorrecta..."
+                          className="input-field text-xs resize-none" />
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => handleDecidir('rechazar')} disabled={deciding}
+                          className="btn-danger flex-1 py-2 text-xs flex items-center justify-center gap-1 cursor-pointer">
+                          {deciding && <Loader2 size={12} className="animate-spin" />} Confirmar Rechazo
+                        </button>
+                        <button type="button" onClick={() => { setShowRechazoForm(false); setMotivoRechazo('') }} disabled={deciding}
+                          className="btn-secondary px-3 py-2 text-xs cursor-pointer">Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Estado final (historial) */}
+              {selected.estado !== 'PENDIENTE' && (
+                <div className="mt-4 p-4 rounded-xl text-center"
+                  style={{
+                    background: selected.estado === 'RECHAZADA' ? 'rgba(239,68,68,0.05)' : 'rgba(34,197,94,0.05)',
+                    border: `1px solid ${selected.estado === 'RECHAZADA' ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}`
+                  }}>
+                  {selected.estado === 'RECHAZADA'
+                    ? <XCircle size={24} className="mx-auto mb-2 text-red-500" />
+                    : <CheckCircle2 size={24} className="mx-auto mb-2 text-green-500" />}
+                  <p className="text-sm font-bold text-white">
+                    {selected.estado === 'APROBADA' ? 'Aprobada por ti' :
+                     selected.estado === 'ENTREGADA' ? 'Entregada al alumno' :
+                     selected.estado === 'DEVUELTA' ? 'Material devuelto' :
+                     selected.estado === 'RECHAZADA' ? 'Rechazada por ti' : selected.estado}
+                  </p>
+                  {selected.observaciones && (
+                    <p className="text-[11px] text-gray-400 mt-1 italic">"{selected.observaciones}"</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
   )
 }
 
@@ -491,6 +828,11 @@ export default function PanelPage() {
     aprobadas:  solicitudes.filter(s => s.estado === 'APROBADA').length,
     entregadas: solicitudes.filter(s => s.estado === 'ENTREGADA' || s.estado === 'DEVUELTA_INCOMPLETA').length,
     devueltas:  solicitudes.filter(s => s.estado === 'DEVUELTA').length,
+  }
+
+  // ── Si el usuario es DOCENTE, mostrar su vista dedicada ──────────────────
+  if (profile?.rol === 'DOCENTE') {
+    return <DocenteView profile={profile} onLogout={handleLogout} />
   }
 
   return (
