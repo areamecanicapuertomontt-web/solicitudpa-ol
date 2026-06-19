@@ -298,7 +298,48 @@ export default function SolicitudPage() {
           setValue('seccion', seccionVal || 'N/A')
         }
       } catch (err) {
-        console.error("Error loading profile:", err)
+        // Un solo reintento silencioso después de 3 segundos
+        console.warn("loadProfile falló en frío, reintentando en 3s...", err)
+        setTimeout(async () => {
+          try {
+            const { data: { user } } = await supabaseClient.auth.getUser()
+            if (!user) return
+            let perf = null
+            try {
+              const { data } = await supabaseClient
+                .from('perfiles')
+                .select('*')
+                .eq('id', user.id)
+                .single()
+              perf = data
+            } catch (_) {}
+            if (!perf) {
+              perf = {
+                id: user.id,
+                email: user.email,
+                nombre: user.user_metadata?.nombre || 'Usuario Inacap',
+                rol: user.user_metadata?.rol || 'ALUMNO',
+                rut: user.user_metadata?.rut || '',
+                jornada: user.user_metadata?.jornada || 'D',
+                seccion: user.user_metadata?.seccion || '',
+              }
+            }
+            setProfile(perf)
+            setValue('alumno', perf.nombre || '')
+            setValue('rut', perf.rut || '')
+            setValue('alumno_email', perf.email || '')
+            if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
+            const seccionVal = perf.seccion || ''
+            const detected = perf.carrera
+              || (seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi') ? 'IMI'
+              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi') ? 'MI'
+              : 'ALL')
+            setSelectedCarrera(detected)
+            setValue('seccion', seccionVal || 'N/A')
+          } catch (retryErr) {
+            console.error("Error loading profile (reintento fallido):", retryErr)
+          }
+        }, 3000)
       }
     }
     loadProfile()
