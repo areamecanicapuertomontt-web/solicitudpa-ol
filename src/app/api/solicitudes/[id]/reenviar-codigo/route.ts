@@ -73,17 +73,13 @@ export async function POST(
       return Response.json({ error: 'El alumno no tiene una cuenta o suscripción activa registrada' }, { status: 404 })
     }
 
-    // 6. Enviar la notificación push con el código
-    const result = await enviarPushNotificacion(
+    // 6. Enviar la notificación push en background — responder de inmediato
+    enviarPushNotificacion(
       alumnoUserId,
       '🔑 Código de Entrega',
       `Tu código para retirar materiales de "${solicitud.asignatura}" es: ${solicitud.codigo_entrega}`,
       `/solicitud/${solicitud.id}/confirmacion`
-    )
-
-    if (!result.success) {
-      return Response.json({ error: 'No se pudo enviar la notificación push: ' + (result.error || 'Sin suscripciones activas') }, { status: 500 })
-    }
+    ).catch(e => console.error('[reenviar-codigo] Error en push:', e))
 
     return Response.json({ ok: true })
   } catch (error: any) {

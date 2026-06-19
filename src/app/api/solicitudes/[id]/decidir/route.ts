@@ -86,72 +86,65 @@ export async function PATCH(
       return Response.json({ error: 'Error al actualizar el estado de la solicitud' }, { status: 500 })
     }
 
-    // 8. Enviar notificaciones push en segundo plano (FCM)
+    // 8. Disparar notificaciones push en background — sin bloquear la respuesta
     const docenteNombre = solicitud.docente?.nombre || perf.nombre
+    const solicitudSnapshot = { ...solicitud }
 
-    // Buscamos el ID del alumno en la tabla perfiles
-    let alumnoUserId: string | null = null
-    try {
-      const orQuery = []
-      if (solicitud.alumno_email) orQuery.push(`email.eq.${solicitud.alumno_email}`)
-      if (solicitud.rut) orQuery.push(`rut.eq.${solicitud.rut}`)
-      
-      if (orQuery.length > 0) {
-        const { data: alumnoProfile } = await supabase
-          .from('perfiles')
-          .select('id')
-          .or(orQuery.join(','))
-          .limit(1)
-          .maybeSingle()
-        if (alumnoProfile) {
-          alumnoUserId = alumnoProfile.id
-        }
-      }
-    } catch (err) {
-      console.error('Error buscando perfil de alumno:', err)
-    }
-
-    if (accion === 'aprobar' && codigoEntrega) {
-      // 1. Notificación al Alumno
-      if (alumnoUserId) {
-        enviarPushNotificacion(
-          alumnoUserId,
-          '¡Solicitud Aprobada! ✅',
-          `Tu solicitud para "${solicitud.asignatura}" fue autorizada. Preséntate en el pañol con tu RUT.`,
-          `/solicitud/${solicitud.id}/confirmacion`
-        ).catch(e => console.error('Error push alumno aprobado:', e))
-      }
-
-      // 2. Notificación a Pañoleros y Admins
+    ;(async () => {
       try {
-        const { data: perfilesPanol } = await supabase
-          .from('perfiles')
-          .select('id')
-          .in('rol', ['PANOL', 'ADMIN'])
-        
-        const panolUserIds = (perfilesPanol || []).map(p => p.id)
-        if (panolUserIds.length > 0) {
-          enviarPushNotificacion(
-            panolUserIds,
-            'Nuevo Préstamo Autorizado 📦',
-            `Preparar materiales para el alumno ${solicitud.alumno}. Código de Entrega: ${codigoEntrega}.`,
-            `/panel`
-          ).catch(e => console.error('Error push pañol:', e))
+        let alumnoUserId: string | null = null
+        const orQuery = []
+        if (solicitudSnapshot.alumno_email) orQuery.push(`email.eq.${solicitudSnapshot.alumno_email}`)
+        if (solicitudSnapshot.rut) orQuery.push(`rut.eq.${solicitudSnapshot.rut}`)
+
+        if (orQuery.length > 0) {
+          const { data: alumnoProfile } = await supabase
+            .from('perfiles')
+            .select('id')
+            .or(orQuery.join(','))
+            .limit(1)
+            .maybeSingle()
+          if (alumnoProfile) alumnoUserId = alumnoProfile.id
+        }
+
+        if (accion === 'aprobar' && codigoEntrega) {
+          if (alumnoUserId) {
+            enviarPushNotificacion(
+              alumnoUserId,
+              '¡Solicitud Aprobada! ✅',
+              `Tu solicitud para "${solicitudSnapshot.asignatura}" fue autorizada. Preséntate en el pañol con tu RUT.`,
+              `/solicitud/${solicitudSnapshot.id}/confirmacion`
+            ).catch(e => console.error('Error push alumno aprobado:', e))
+          }
+
+          const { data: perfilesPanol } = await supabase
+            .from('perfiles')
+            .select('id')
+            .in('rol', ['PANOL', 'ADMIN'])
+
+          const panolUserIds = (perfilesPanol || []).map(p => p.id)
+          if (panolUserIds.length > 0) {
+            enviarPushNotificacion(
+              panolUserIds,
+              'Nuevo Préstamo Autorizado 📦',
+              `Preparar materiales para el alumno ${solicitudSnapshot.alumno}. Código de Entrega: ${codigoEntrega}.`,
+              `/panel`
+            ).catch(e => console.error('Error push pañol:', e))
+          }
+        } else if (accion === 'rechazar') {
+          if (alumnoUserId) {
+            enviarPushNotificacion(
+              alumnoUserId,
+              'Solicitud Rechazada ❌',
+              `Tu solicitud para "${solicitudSnapshot.asignatura}" fue rechazada.${motivoRechazo ? ` Motivo: "${motivoRechazo}"` : ' Revisa el detalle para más información.'}`,
+              `/solicitud/${solicitudSnapshot.id}/confirmacion`
+            ).catch(e => console.error('Error push alumno rechazado:', e))
+          }
         }
       } catch (err) {
-        console.error('Error enviando notificaciones push a pañoleros:', err)
+        console.error('[decidir] Error en notificaciones push background:', err)
       }
-    } else if (accion === 'rechazar') {
-      // Notificación al Alumno del rechazo
-      if (alumnoUserId) {
-        enviarPushNotificacion(
-          alumnoUserId,
-          'Solicitud Rechazada ❌',
-          `Tu solicitud para "${solicitud.asignatura}" fue rechazada.${motivoRechazo ? ` Motivo: "${motivoRechazo}"` : ' Revisa el detalle para más información.'}`,
-          `/solicitud/${solicitud.id}/confirmacion`
-        ).catch(e => console.error('Error push alumno rechazado:', e))
-      }
-    }
+    })()
 
     return Response.json({ ok: true, estado: nuevoEstado })
   } catch (error: any) {

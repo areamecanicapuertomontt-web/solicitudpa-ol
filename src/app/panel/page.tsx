@@ -781,7 +781,7 @@ export default function PanelPage() {
       const { data: { session } } = await supabaseBrowser.auth.getSession()
       if (!session) {
         alert('Sesión expirada. Por favor inicia sesión nuevamente.')
-        return
+        return  // finally sí se ejecuta después de este return en JS/TS
       }
 
       const res = await fetch(`/api/solicitudes/${id}/reenviar-codigo`, {
@@ -802,7 +802,7 @@ export default function PanelPage() {
       console.error(err)
       alert('❌ Error de red al re-enviar el código.')
     } finally {
-      setReenviando(null)
+      setReenviando(null)  // siempre se ejecuta, incluso con return o throw
     }
   }
 

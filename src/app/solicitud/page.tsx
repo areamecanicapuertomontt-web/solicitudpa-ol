@@ -243,7 +243,7 @@ export default function SolicitudPage() {
       try {
         const userPromise = supabaseClient.auth.getUser()
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 3000)
+          setTimeout(() => reject(new Error('Timeout')), 10000)
         )
         const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
         if (user) {
