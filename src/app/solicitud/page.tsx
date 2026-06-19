@@ -181,8 +181,19 @@ export default function SolicitudPage() {
         .order('nivel', { ascending: true })
         .order('nombre', { ascending: true })
       
-      if (!error && data) {
+      if (error) {
+        console.error('[loadAsignaturas] Error al consultar tabla "asignaturas" en Supabase:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        })
+        return
+      }
+      if (data) {
         setAsignaturas(data)
+      } else {
+        console.warn('[loadAsignaturas] La consulta no devolvió error pero tampoco datos.')
       }
     }
     loadAsignaturas()
