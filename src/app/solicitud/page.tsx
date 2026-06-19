@@ -33,8 +33,6 @@ import {
 } from 'lucide-react'
 import type { Docente } from '@/lib/types'
 import { supabaseClient } from '@/lib/supabase-client'
-import NotificationBell from '@/components/NotificationBell'
-import HelpButton from '@/components/HelpButton'
 
 
 const schema = z.object({
@@ -62,7 +60,6 @@ export default function SolicitudPage() {
   const [error, setError] = useState<string | null>(null)
   const [profile, setProfile] = useState<any>(null)
   const [asignaturas, setAsignaturas] = useState<any[]>([])
-  const [profileLoadError, setProfileLoadError] = useState<string | null>(null)
   const [selectedCarrera, setSelectedCarrera] = useState<string>('ALL')
   const [activeAutocomplete, setActiveAutocomplete] = useState<number | null>(null)
   const [autocompleteSearch, setAutocompleteSearch] = useState<Record<number,string>>({})
@@ -90,161 +87,12 @@ export default function SolicitudPage() {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' })
 
-  // 1. Cargar datos del perfil de usuario con soporte de 3 reintentos y timeout de 10 segundos
-  async function loadProfile() {
-    let user = null
-    try {
-      const userPromise = supabaseClient.auth.getUser()
-      const timeoutPromise = new Promise<any>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout de auth')), 10000)
-      )
-      const res = await Promise.race([userPromise, timeoutPromise])
-      user = res.data?.user
-    } catch (err) {
-      console.warn("loadProfile auth check error/timeout:", err)
-      throw err
-    }
-
-    if (!user) {
-      throw new Error("No hay usuario logueado en la sesión")
-    }
-
-    try {
-      const { data, error } = await supabaseClient
-        .from('perfiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-      
-      if (error) throw error
-      return data || null
-    } catch (err) {
-      console.warn("loadProfile DB select error:", err)
-      // Fallback a metadata local del usuario
-      const fallbackPerf = {
-        id: user.id,
-        email: user.email,
-        nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-        rol: user.user_metadata?.rol || 'ALUMNO',
-        rut: user.user_metadata?.rut || '',
-        jornada: user.user_metadata?.jornada || 'D',
-        seccion: user.user_metadata?.seccion || '',
-      }
-      return fallbackPerf
-    }
-  }
-
-  // Bucle de reintentos automáticos para el perfil (hasta 3 veces, cada 2 segundos)
-  async function runProfileLoaderWithRetries() {
-    const maxRetries = 3
-    let attempt = 0
-    let success = false
-    let lastError = null
-
-    while (attempt < maxRetries && !success) {
-      attempt++
-      try {
-        const perf = await loadProfile()
-        if (perf) {
-          setProfile(perf)
-          setValue('alumno', perf.nombre || '')
-          setValue('rut', perf.rut || '')
-          setValue('alumno_email', perf.email || '')
-          if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
-
-          const carreraFromProfile = perf.carrera || null
-          const seccionVal = perf.seccion || ''
-          let detected = carreraFromProfile
-          if (!detected) {
-            detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
-              ? 'IMI'
-              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
-              ? 'MI'
-              : 'ALL'
-          }
-          setSelectedCarrera(detected || 'ALL')
-          setValue('seccion', seccionVal || 'N/A')
-          
-          success = true
-          setProfileLoadError(null)
-        }
-      } catch (err: any) {
-        lastError = err
-        console.warn(`[loadProfile] Intento ${attempt} de ${maxRetries} falló:`, err.message || err)
-        if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-        }
-      }
-    }
-
-    if (!success) {
-      setProfileLoadError("No se pudo cargar tu perfil, recarga la página")
-    }
-  }
-
-  // Cargar docentes, asignaturas y perfil en paralelo al montar
   useEffect(() => {
-    // Carga de docentes con un reintento automático de 2s si falla
-    async function fetchDocentes(isRetry = false): Promise<any[]> {
-      try {
-        const res = await fetch('/api/docentes')
-        if (!res.ok) throw new Error('Error al cargar docentes')
-        const data = await res.json()
-        return data.docentes || []
-      } catch (err) {
-        if (!isRetry) {
-          console.warn("Fallo al cargar docentes, reintentando en 2 segundos...", err)
-          return new Promise((resolve) => {
-            setTimeout(() => {
-              resolve(fetchDocentes(true))
-            }, 2000)
-          })
-        }
-        console.error("Reintento de docentes falló definitivamente:", err)
-        return []
-      }
-    }
-
-    // Carga de asignaturas con un reintento automático de 2s si falla
-    async function fetchAsignaturas(isRetry = false): Promise<any[]> {
-      const { data, error } = await supabaseClient
-        .from('asignaturas')
-        .select('*')
-        .order('nivel', { ascending: true })
-        .order('nombre', { ascending: true })
-      
-      if (!error && data) {
-        return data
-      } else if (!isRetry) {
-        console.warn("Fallo al cargar asignaturas, reintentando en 2 segundos...", error)
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            resolve(fetchAsignaturas(true))
-          }, 2000)
-        })
-      }
-      console.error("Reintento de asignaturas falló definitivamente:", error)
-      return []
-    }
-
-    async function initializeData() {
-      // Lanzamos las consultas en paralelo
-      const docentesPromise = fetchDocentes()
-      const asignaturasPromise = fetchAsignaturas()
-      const perfilPromise = runProfileLoaderWithRetries() // Tiene sus propios reintentos internos
-
-      const [docentesData, asignaturasData] = await Promise.all([
-        docentesPromise,
-        asignaturasPromise,
-        perfilPromise // Incluido en Promise.all para concurrencia
-      ])
-
-      setDocentes(docentesData)
-      setAsignaturas(asignaturasData)
-    }
-
-    initializeData()
-  }, [setValue])
+    fetch('/api/docentes')
+      .then(r => r.json())
+      .then(data => setDocentes(data.docentes || []))
+      .catch(() => setDocentes([]))
+  }, [])
 
 
 
@@ -325,7 +173,20 @@ export default function SolicitudPage() {
     })
   }, [equiposCatalog, catalogSearch, filtroArea, filtroFrecuencia])
 
-
+  useEffect(() => {
+    async function loadAsignaturas() {
+      const { data, error } = await supabaseClient
+        .from('asignaturas')
+        .select('*')
+        .order('nivel', { ascending: true })
+        .order('nombre', { ascending: true })
+      
+      if (!error && data) {
+        setAsignaturas(data)
+      }
+    }
+    loadAsignaturas()
+  }, [])
 
   // Cargar pañoleros activos
   useEffect(() => {
@@ -366,7 +227,71 @@ export default function SolicitudPage() {
     return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const userPromise = supabaseClient.auth.getUser()
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 3000)
+        )
+        const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
+        if (user) {
+          let perf = null
+          try {
+            const { data } = await supabaseClient
+              .from('perfiles')
+              .select('*')
+              .eq('id', user.id)
+              .single()
+            perf = data
+          } catch (e) {
+            console.error("Error cargando perfil desde tabla perfiles:", e)
+          }
 
+          // Fallback: Si no existe en la tabla perfiles, usamos metadatos de auth
+          if (!perf) {
+            perf = {
+              id: user.id,
+              email: user.email,
+              nombre: user.user_metadata?.nombre || 'Usuario Inacap',
+              rol: user.user_metadata?.rol || 'ALUMNO',
+              rut: user.user_metadata?.rut || '',
+              jornada: user.user_metadata?.jornada || 'D',
+              seccion: user.user_metadata?.seccion || '',
+            }
+          }
+
+          setProfile(perf)
+          setValue('alumno', perf.nombre || '')
+          setValue('rut', perf.rut || '')
+          setValue('alumno_email', perf.email || '')
+          if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
+
+          // Carrera: primero desde columna carrera, luego detección por sección (compatibilidad)
+          const carreraFromProfile = perf.carrera || null
+          const seccionVal = perf.seccion || ''
+
+          let detected = carreraFromProfile
+          if (!detected) {
+            // fallback: detectar por nombre de sección
+            detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
+              ? 'IMI'
+              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
+              ? 'MI'
+              : 'ALL'
+          }
+
+          setSelectedCarrera(detected || 'ALL')
+
+          // Sección: siempre guardamos el valor de sección (aunque sea largo, o fallback a 'N/A')
+          setValue('seccion', seccionVal || 'N/A')
+        }
+      } catch (err) {
+        console.error("Error loading profile:", err)
+      }
+    }
+    loadProfile()
+  }, [setValue])
 
   // Mapa de código a nombre completo de carrera
   const CARRERA_NOMBRES: Record<string, string> = {
@@ -397,25 +322,7 @@ export default function SolicitudPage() {
   })
 
   async function handleLogout() {
-    try {
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        const reg = await navigator.serviceWorker.getRegistration()
-        if (reg) {
-          const sub = await reg.pushManager.getSubscription()
-          if (sub) {
-            await supabaseClient.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error al limpiar suscripción push en logout:', e)
-    }
-
-    try {
-      await supabaseClient.auth.signOut()
-    } catch (err) {
-      console.error('Error al cerrar sesión:', err)
-    }
+    await supabaseClient.auth.signOut()
     window.location.href = '/login'
   }
 
@@ -476,18 +383,14 @@ export default function SolicitudPage() {
                   {profile.email}
                 </p>
               </div>
-              <div className="flex items-center gap-1.5 border-l border-white/10 pl-2">
-                <NotificationBell />
-                <HelpButton rol="ALUMNO" />
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors"
-                  title="Cerrar Sesión"
-                >
-                  <LogOut size={16} />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors"
+                title="Cerrar Sesión"
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           )}
         </div>
@@ -530,12 +433,6 @@ export default function SolicitudPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 animate-fade-in" style={{ animationDelay: '80ms' }}>
 
-          {profileLoadError && (
-            <div className="p-3.5 rounded-xl border text-xs font-semibold animate-fade-in" style={{ background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)', color: 'var(--nacap-red)' }}>
-              ⚠️ {profileLoadError}
-            </div>
-          )}
-
           {/* Welcome Card & Identity Confirmation */}
           {profile && (
             <div className="card p-5 bg-gradient-to-r from-red-600/10 to-red-900/5 border-red-500/20 relative overflow-hidden animate-fade-in">
@@ -562,67 +459,12 @@ export default function SolicitudPage() {
             </div>
           )}
 
-          {/* Si no hay perfil cargado, mostramos los campos para que los ingresen manualmente */}
-          {!profile ? (
-            <div className="card p-5 space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
-                Información del Alumno
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Nombre Completo</label>
-                  <input type="text" {...register('alumno')} className="input-field" placeholder="Tu nombre y apellido" />
-                  {errors.alumno && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.alumno.message}</p>}
-                </div>
-                <div>
-                  <label className="label">RUT</label>
-                  <input type="text" {...register('rut')} className="input-field" placeholder="12.345.678-9" />
-                  {errors.rut && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.rut.message}</p>}
-                </div>
-                <div>
-                  <label className="label">Correo Institucional</label>
-                  <input type="email" {...register('alumno_email')} className="input-field" placeholder="usuario@inacapmail.cl" />
-                  {errors.alumno_email && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.alumno_email.message}</p>}
-                </div>
-                <div>
-                  <label className="label">Sección</label>
-                  <input
-                    type="text"
-                    {...register('seccion')}
-                    className="input-field"
-                    placeholder="Ej: MI-123"
-                    onChange={(e) => {
-                      register('seccion').onChange(e)
-                      const seccionVal = e.target.value
-                      const detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
-                        ? 'IMI'
-                        : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
-                        ? 'MI'
-                        : 'ALL'
-                      setSelectedCarrera(detected)
-                    }}
-                  />
-                  {errors.seccion && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.seccion.message}</p>}
-                </div>
-                <div>
-                  <label className="label">Jornada</label>
-                  <select {...register('jornada')} className="input-field">
-                    <option value="D">Diurna</option>
-                    <option value="V">Vespertina</option>
-                  </select>
-                  {errors.jornada && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.jornada.message}</p>}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <input type="hidden" {...register('alumno')} />
-              <input type="hidden" {...register('rut')} />
-              <input type="hidden" {...register('alumno_email')} />
-              <input type="hidden" {...register('jornada')} />
-              <input type="hidden" {...register('seccion')} />
-            </>
-          )}
+          {/* Hidden fields — se envían automáticamente desde el perfil */}
+          <input type="hidden" {...register('alumno')} />
+          <input type="hidden" {...register('rut')} />
+          <input type="hidden" {...register('alumno_email')} />
+          <input type="hidden" {...register('jornada')} />
+          <input type="hidden" {...register('seccion')} />
 
           {/* ── Datos de la Solicitud ── */}
           <div className="card p-5">
