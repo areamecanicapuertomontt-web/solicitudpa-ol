@@ -33,26 +33,25 @@ export default function ConfirmacionPage({
     if (!id) return
 
     async function fetchEstado() {
-      const { data } = await supabaseClient
+      const { data, error } = await supabaseClient
         .from('solicitudes')
         .select('estado, codigo_entrega, alumno, asignatura')
         .eq('id', id)
-        .single()
+        .maybeSingle()
 
-      if (data) {
+      if (data && !error) {
         setSolicitud(data)
-        // Generar QR si está aprobada
         if (data.estado === 'APROBADA' && data.codigo_entrega) {
-          try {
-            const url = await QRCode.toDataURL(data.codigo_entrega, {
-              width: 280,
-              margin: 2,
-              color: { dark: '#FFFFFF', light: '#0D1B2E' },
-              errorCorrectionLevel: 'H',
-            })
-            setQrDataUrl(url)
-          } catch {}
+          QRCode.toDataURL(data.codigo_entrega, {
+            width: 280,
+            margin: 2,
+            color: { dark: '#FFFFFF', light: '#0D1B2E' },
+            errorCorrectionLevel: 'H',
+          }).then(setQrDataUrl).catch(() => {})
         }
+      }
+    }
+
       }
       setLoading(false)
     }

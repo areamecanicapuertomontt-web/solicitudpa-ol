@@ -77,7 +77,7 @@ function TabInitializer({
 }
 
 // ─── Mis Solicitudes ─────────────────────────────────────────────────────────
-function MisSolicitudes({ profile, openId }: { profile: any; openId: string | null }) {
+function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; openId: string | null; profileLoaded: boolean }) {
   const [solicitudes, setSolicitudes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [openSolicitudId, setOpenSolicitudId] = useState<string | null>(openId)
@@ -136,6 +136,22 @@ function MisSolicitudes({ profile, openId }: { profile: any; openId: string | nu
     DEVUELTA:           { label: 'Devuelta',            color: '#A78BFA', icon: <RotateCcw size={12} /> },
     DEVUELTA_INCOMPLETA:{ label: 'Dev. Incompleta',    color: '#F97316', icon: <RotateCcw size={12} /> },
   }
+
+  if (!profileLoaded) return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3">
+      <span className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+      <p className="text-sm text-gray-500">Verificando sesión...</p>
+    </div>
+  )
+
+  if (profileLoaded && !profile) return (
+    <div className="text-center py-16 px-4">
+      <User size={40} className="mx-auto mb-3 text-gray-600" />
+      <p className="text-sm font-semibold text-gray-400">Debes iniciar sesión</p>
+      <p className="text-xs text-gray-600 mt-1 mb-4">Para ver tu historial y tus códigos de retiro, necesitas iniciar sesión.</p>
+      <Link href="/login" className="btn-primary px-6 py-2 text-sm rounded-xl inline-flex">Ir a Iniciar Sesión</Link>
+    </div>
+  )
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -292,6 +308,7 @@ export default function SolicitudPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [profile, setProfile] = useState<any>(null)
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [asignaturas, setAsignaturas] = useState<any[]>([])
   const [selectedCarrera, setSelectedCarrera] = useState<string>('ALL')
   const [activeAutocomplete, setActiveAutocomplete] = useState<number | null>(null)
@@ -530,13 +547,17 @@ export default function SolicitudPage() {
           // Sección: siempre guardamos el valor de sección (aunque sea largo, o fallback a 'N/A')
           setValue('seccion', seccionVal || 'N/A')
         }
+        setProfileLoaded(true)
       } catch (err) {
         // Un solo reintento silencioso después de 3 segundos
         console.warn("loadProfile falló en frío, reintentando en 3s...", err)
         setTimeout(async () => {
           try {
             const { data: { user } } = await supabaseClient.auth.getUser()
-            if (!user) return
+            if (!user) {
+              setProfileLoaded(true)
+              return
+            }
             let perf = null
             try {
               const { data } = await supabaseClient
@@ -571,6 +592,8 @@ export default function SolicitudPage() {
             setValue('seccion', seccionVal || 'N/A')
           } catch (retryErr) {
             console.error("Error loading profile (reintento fallido):", retryErr)
+          } finally {
+            setProfileLoaded(true)
           }
         }, 3000)
       }
@@ -710,7 +733,7 @@ export default function SolicitudPage() {
         </Suspense>
 
         {activeTab === 'mis-solicitudes' ? (
-          <MisSolicitudes profile={profile} openId={openIdFromUrl} />
+          <MisSolicitudes profile={profile} openId={openIdFromUrl} profileLoaded={profileLoaded} />
         ) : (
         <>
 
