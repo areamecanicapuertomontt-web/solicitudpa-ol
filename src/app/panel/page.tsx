@@ -791,7 +791,7 @@ export default function PanelPage() {
         
         // Promesa de timeout para evitar cuelgues de red infinitos
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 3000)
+          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 10000)
         )
         
         // Competir: el primero que responda
@@ -835,7 +835,7 @@ export default function PanelPage() {
                 .single()
               
               const timeoutPromise = new Promise<any>((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout de reintento')), 3000)
+                setTimeout(() => reject(new Error('Timeout de reintento')), 10000)
               )
               
               const retryRes = await Promise.race([queryPromise, timeoutPromise])
@@ -1126,12 +1126,48 @@ export default function PanelPage() {
 
   if (loadingProfile) {
     return (
-      <main className="min-h-screen py-8 px-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="max-w-md w-full text-center space-y-4">
-          <div className="flex justify-center">
-            <span className="w-10 h-10 border-4 border-white/20 border-t-red-600 rounded-full animate-spin" />
+      <main className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+        {/* Skeleton Navbar */}
+        <div className="sticky top-0 z-40 animate-pulse border-b" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
+          <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-8 bg-red-900/50 rounded-full" />
+              <div>
+                <div className="h-3 w-32 bg-gray-800 rounded mb-1" />
+                <div className="h-5 w-48 bg-gray-700 rounded" />
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-gray-800 rounded-xl" />
+              <div className="w-10 h-10 bg-gray-800 rounded-xl" />
+            </div>
           </div>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest animate-pulse">Cargando tu perfil...</p>
+        </div>
+
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 animate-pulse">
+          {/* Skeleton Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-24 bg-gray-800/50 rounded-2xl border border-gray-800" />
+            ))}
+          </div>
+          
+          {/* Skeleton Search & Tools */}
+          <div className="flex flex-col md:flex-row gap-3 mb-6">
+            <div className="h-12 flex-1 bg-gray-800/50 rounded-xl border border-gray-800" />
+            <div className="h-12 w-full md:w-48 bg-gray-800/50 rounded-xl border border-gray-800" />
+            <div className="h-12 w-full md:w-32 bg-gray-800/50 rounded-xl border border-gray-800" />
+          </div>
+
+          {/* Skeleton List & Details */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-28 bg-gray-800/30 rounded-2xl border border-gray-800" />
+              ))}
+            </div>
+            <div className="hidden lg:block h-[600px] bg-gray-800/20 rounded-2xl border border-gray-800" />
+          </div>
         </div>
       </main>
     )

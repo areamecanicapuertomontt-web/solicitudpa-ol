@@ -219,7 +219,7 @@ export default function AdminPage() {
           .single()
         
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 3000)
+          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 10000)
         )
         
         const res = await Promise.race([queryPromise, timeoutPromise])
@@ -268,7 +268,7 @@ export default function AdminPage() {
                   .single()
                 
                 const timeoutPromise = new Promise<any>((_, reject) =>
-                  setTimeout(() => reject(new Error('Timeout de reintento')), 3000)
+                  setTimeout(() => reject(new Error('Timeout de reintento')), 10000)
                 )
                 
                 const retryRes = await Promise.race([queryPromise, timeoutPromise])
@@ -787,14 +787,40 @@ export default function AdminPage() {
     }
   }, [solicitudes, docentes])
 
-  if (loadingProfile) {
+  if (loadingProfile || loading) {
     return (
-      <main className="min-h-screen py-8 px-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="max-w-md w-full text-center space-y-4">
-          <div className="flex justify-center">
-            <span className="w-10 h-10 border-4 border-white/20 border-t-red-600 rounded-full animate-spin" />
+      <main className="min-h-screen py-8 px-4 sm:px-6" style={{ background: 'var(--bg-primary)' }}>
+        <div className="max-w-6xl mx-auto animate-pulse">
+          {/* Skeleton Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gray-800"></div>
+              <div className="flex items-center gap-3">
+                <div className="w-1 h-10 rounded-full bg-red-900/50"></div>
+                <div className="space-y-2">
+                  <div className="h-3 w-32 bg-gray-800 rounded"></div>
+                  <div className="h-5 w-48 bg-gray-700 rounded"></div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="h-12 w-full sm:w-48 bg-gray-800 rounded-xl"></div>
+              <div className="h-12 w-12 bg-gray-800 rounded-xl hidden sm:block"></div>
+            </div>
           </div>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest animate-pulse">Verificando credenciales de administrador...</p>
+          {/* Skeleton Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-24 bg-gray-800/50 rounded-2xl border border-gray-800"></div>
+            ))}
+          </div>
+          {/* Skeleton Tabs & Content */}
+          <div className="flex gap-2 overflow-x-auto mb-6 pb-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-10 w-32 bg-gray-800 rounded-xl shrink-0"></div>
+            ))}
+          </div>
+          <div className="h-96 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
         </div>
       </main>
     )

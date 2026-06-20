@@ -141,9 +141,10 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
   }
 
   if (!profileLoaded) return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <span className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-      <p className="text-sm text-gray-500">Verificando sesión...</p>
+    <div className="space-y-4 animate-pulse pt-4">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="h-32 bg-gray-800/30 rounded-2xl border border-gray-800" />
+      ))}
     </div>
   )
 
@@ -157,9 +158,10 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
   )
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <span className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-      <p className="text-sm text-gray-500">Cargando tus solicitudes...</p>
+    <div className="space-y-4 animate-pulse pt-4">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="h-32 bg-gray-800/30 rounded-2xl border border-gray-800" />
+      ))}
     </div>
   )
 
@@ -556,7 +558,11 @@ export default function SolicitudPage() {
         console.warn("loadProfile falló en frío, reintentando en 3s...", err)
         setTimeout(async () => {
           try {
-            const { data: { user } } = await supabaseClient.auth.getUser()
+            const userPromise = supabaseClient.auth.getUser()
+            const retryTimeoutPromise = new Promise<any>((_, reject) =>
+              setTimeout(() => reject(new Error('Timeout de reintento')), 10000)
+            )
+            const { data: { user } } = await Promise.race([userPromise, retryTimeoutPromise])
             if (!user) {
               setProfileLoaded(true)
               return
@@ -730,12 +736,22 @@ export default function SolicitudPage() {
           </button>
         </div>
 
-        {/* ── Contenido según tab activo ── */}
         <Suspense fallback={null}>
           <TabInitializer onInit={handleTabInit} />
         </Suspense>
 
-        {activeTab === 'mis-solicitudes' ? (
+        {!profileLoaded ? (
+          <div className="animate-pulse space-y-6">
+            <div className="h-14 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
+            <div className="h-14 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-14 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
+              <div className="h-14 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
+            </div>
+            <div className="h-32 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
+            <div className="h-14 bg-red-900/30 rounded-2xl border border-red-900/50"></div>
+          </div>
+        ) : activeTab === 'mis-solicitudes' ? (
           <MisSolicitudes profile={profile} openId={openIdFromUrl} profileLoaded={profileLoaded} />
         ) : (
         <>
