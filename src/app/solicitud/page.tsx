@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -29,10 +29,18 @@ import {
   XCircle,
   BarChart3,
   Check,
-  HelpCircle
+  HelpCircle,
+  ClipboardList,
+  QrCode,
+  KeyRound,
+  Clock,
+  Truck,
+  RotateCcw,
+  ChevronRight
 } from 'lucide-react'
 import type { Docente } from '@/lib/types'
 import { supabaseClient } from '@/lib/supabase-client'
+import QRCode from 'qrcode'
 
 
 const schema = z.object({
@@ -53,8 +61,217 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
+// ─── Mis Solicitudes ─────────────────────────────────────────────────────────
+function MisSolicitudes({ profile, openId }: { profile: any; openId: string | null }) {
+  const [solicitudes, setSolicitudes] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [openSolicitudId, setOpenSolicitudId] = useState<string | null>(openId)
+  const [qrMap, setQrMap] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (openId) setOpenSolicitudId(openId)
+  }, [openId])
+
+  useEffect(() => {
+    if (!profile) return
+    async function fetchMisSolicitudes() {
+      setLoading(true)
+      try {
+        const orParts: string[] = []
+        if (profile.email) orParts.push(`alumno_email.eq.${profile.email}`)
+        if (profile.rut)   orParts.push(`rut.eq.${profile.rut}`)
+        if (!orParts.length) { setLoading(false); return }
+        const { data } = await supabaseClient
+          .from('solicitudes')
+          .select('*, items:items_solicitud(*)')
+          .or(orParts.join(','))
+          .order('created_at', { ascending: false })
+          .limit(30)
+        setSolicitudes(data || [])
+
+        // Pre-generar QRs para las APROBADAS
+        const aprobadas = (data || []).filter((s: any) => s.estado === 'APROBADA' && s.codigo_entrega)
+        const qrs: Record<string, string> = {}
+        await Promise.all(aprobadas.map(async (s: any) => {
+          try {
+            qrs[s.id] = await QRCode.toDataURL(s.codigo_entrega, {
+              width: 220, margin: 2,
+              color: { dark: '#FFFFFF', light: '#0D1B2E' },
+              errorCorrectionLevel: 'H',
+            })
+          } catch {}
+        }))
+        setQrMap(qrs)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchMisSolicitudes()
+
+    // Refresco en tiempo real (polling cada 15s)
+    const interval = setInterval(fetchMisSolicitudes, 15000)
+    return () => clearInterval(interval)
+  }, [profile])
+
+  const ESTADO_CFG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+    PENDIENTE:          { label: 'Pendiente',          color: '#F59E0B', icon: <Clock size={12} /> },
+    APROBADA:           { label: 'Aprobada',           color: '#22C55E', icon: <CheckCircle size={12} /> },
+    RECHAZADA:          { label: 'Rechazada',           color: '#EF4444', icon: <XCircle size={12} /> },
+    ENTREGADA:          { label: 'Entregada',           color: '#60A5FA', icon: <Truck size={12} /> },
+    DEVUELTA:           { label: 'Devuelta',            color: '#A78BFA', icon: <RotateCcw size={12} /> },
+    DEVUELTA_INCOMPLETA:{ label: 'Dev. Incompleta',    color: '#F97316', icon: <RotateCcw size={12} /> },
+  }
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3">
+      <span className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+      <p className="text-sm text-gray-500">Cargando tus solicitudes...</p>
+    </div>
+  )
+
+  if (!solicitudes.length) return (
+    <div className="text-center py-16">
+      <ClipboardList size={40} className="mx-auto mb-3 text-gray-600" />
+      <p className="text-sm font-semibold text-gray-400">No tienes solicitudes aún</p>
+      <p className="text-xs text-gray-600 mt-1">Crea tu primera solicitud con el formulario.</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-3 animate-fade-in">
+      {solicitudes.map((s) => {
+        const cfg = ESTADO_CFG[s.estado] || ESTADO_CFG.PENDIENTE
+        const isOpen = openSolicitudId === s.id
+        const qr = qrMap[s.id]
+
+        return (
+          <div key={s.id} className="card overflow-hidden">
+            {/* Cabecera de la solicitud */}
+            <button
+              type="button"
+              onClick={() => setOpenSolicitudId(isOpen ? null : s.id)}
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: `${cfg.color}18`, color: cfg.color, border: `1px solid ${cfg.color}40` }}
+                  >
+                    {cfg.icon} {cfg.label}
+                  </span>
+                  <span className="text-[10px] text-gray-500">
+                    {new Date(s.created_at).toLocaleDateString('es-CL', { day:'2-digit', month:'short', year:'numeric' })}
+                  </span>
+                </div>
+                <p className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>{s.asignatura}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{(s.items || []).length} material(es)</p>
+              </div>
+              <ChevronRight
+                size={16}
+                className={`flex-shrink-0 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+              />
+            </button>
+
+            {/* Detalle expandido */}
+            {isOpen && (
+              <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-4">
+
+                {/* Materiales */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">Materiales solicitados</p>
+                  <div className="space-y-1">
+                    {(s.items || []).map((item: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-black"
+                          style={{ background: 'var(--nacap-red)', color: 'white' }}>
+                          {item.cantidad}
+                        </span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.descripcion}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Estado PENDIENTE */}
+                {s.estado === 'PENDIENTE' && (
+                  <div className="rounded-xl p-3 flex items-center gap-2"
+                    style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                    <Clock size={14} style={{ color: '#F59E0B', flexShrink: 0 }} />
+                    <p className="text-xs text-amber-300">Esperando confirmación del docente. Esta página se actualiza automáticamente.</p>
+                  </div>
+                )}
+
+                {/* Estado APROBADA: QR prominente */}
+                {s.estado === 'APROBADA' && (
+                  <div className="rounded-xl p-4 flex flex-col items-center"
+                    style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <QrCode size={14} style={{ color: '#22C55E' }} />
+                      <p className="text-xs font-bold" style={{ color: '#22C55E' }}>QR de Retiro — Muéstraselo al pañolero</p>
+                    </div>
+                    {qr ? (
+                      <img src={qr} alt="QR de retiro" className="rounded-xl mb-3" style={{ width: 200, height: 200 }} />
+                    ) : (
+                      <div className="w-[200px] h-[200px] rounded-xl bg-white/5 flex items-center justify-center mb-3">
+                        <span className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <KeyRound size={12} className="text-gray-500" />
+                      <span className="text-xs text-gray-500">Código manual:</span>
+                      <span className="font-mono font-black text-base tracking-[.25em]" style={{ color: 'var(--text-primary)' }}>
+                        {s.codigo_entrega}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Estado RECHAZADA */}
+                {s.estado === 'RECHAZADA' && (
+                  <div className="rounded-xl p-3"
+                    style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-xs text-red-400 font-semibold mb-1">Solicitud rechazada</p>
+                    {s.observaciones && (
+                      <p className="text-xs text-gray-400">Motivo: {s.observaciones}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Estado ENTREGADA */}
+                {s.estado === 'ENTREGADA' && (
+                  <div className="rounded-xl p-3"
+                    style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.2)' }}>
+                    <p className="text-xs text-blue-400">✅ Materiales entregados. Recuerda devolverlos al pañol al finalizar la clase.</p>
+                  </div>
+                )}
+
+                {/* Estado DEVUELTA / DEVUELTA_INCOMPLETA */}
+                {(s.estado === 'DEVUELTA' || s.estado === 'DEVUELTA_INCOMPLETA') && (
+                  <div className="rounded-xl p-3"
+                    style={{ background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)' }}>
+                    <p className="text-xs" style={{ color: '#A78BFA' }}>
+                      {s.estado === 'DEVUELTA' ? '✅ Materiales devueltos correctamente.' : '⚠️ Devolución registrada con materiales pendientes.'}
+                    </p>
+                  </div>
+                )}
+
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function SolicitudPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<'form' | 'mis-solicitudes'>(
+    searchParams.get('tab') === 'mis-solicitudes' ? 'mis-solicitudes' : 'form'
+  )
+  const openIdFromUrl = searchParams.get('id')
   const [docentes, setDocentes] = useState<Docente[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -446,6 +663,36 @@ export default function SolicitudPage() {
             </div>
           )}
         </div>
+
+        {/* ── Tabs: Nueva Solicitud / Mis Solicitudes ── */}
+        <div className="flex rounded-2xl overflow-hidden mb-6 p-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('form')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 ${
+              activeTab === 'form' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
+            }`}
+            style={activeTab === 'form' ? { background: 'var(--nacap-red)' } : {}}
+          >
+            <Send size={13} /> Nueva Solicitud
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('mis-solicitudes')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 ${
+              activeTab === 'mis-solicitudes' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
+            }`}
+            style={activeTab === 'mis-solicitudes' ? { background: 'rgba(255,255,255,0.10)' } : {}}
+          >
+            <ClipboardList size={13} /> Mis Solicitudes
+          </button>
+        </div>
+
+        {/* ── Contenido según tab activo ── */}
+        {activeTab === 'mis-solicitudes' ? (
+          <MisSolicitudes profile={profile} openId={openIdFromUrl} />
+        ) : (
+        <>
 
         {/* Indicador de Pañol Activo (Presencia en tiempo real) */}
         {!loadingPanoleros && (
@@ -877,6 +1124,8 @@ export default function SolicitudPage() {
             Al enviar, se notificará al docente por correo electrónico para su aprobación.
           </p>
         </form>
+        </>
+        )}
       </div>
     </main>
   )

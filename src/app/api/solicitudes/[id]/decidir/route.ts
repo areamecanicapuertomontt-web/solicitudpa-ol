@@ -113,7 +113,7 @@ export async function PATCH(
               alumnoUserId,
               '¡Solicitud Aprobada! ✅',
               `Tu solicitud para "${solicitudSnapshot.asignatura}" fue autorizada. Preséntate en el pañol con tu RUT.`,
-              `/solicitud/${solicitudSnapshot.id}/confirmacion`
+              `/solicitud?tab=mis-solicitudes&id=${solicitudSnapshot.id}`
             ).catch(e => console.error('Error push alumno aprobado:', e))
           }
 
