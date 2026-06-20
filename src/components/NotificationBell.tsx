@@ -160,7 +160,7 @@ export default function NotificationBell() {
 
       {/* Popover */}
       {isOpen && (
-        <div className="absolute right-0 mt-2.5 w-80 rounded-2xl border border-white/5 bg-[#0F1B2F]/95 shadow-2xl backdrop-blur-md z-50 overflow-hidden animate-fade-in">
+        <div className="absolute right-0 mt-2.5 w-80 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-white/5 bg-[#0F1B2F]/95 shadow-2xl backdrop-blur-md z-50 overflow-hidden animate-fade-in">
           <div className="p-3.5 border-b border-white/5 flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-wider text-white">Notificaciones</h3>
             {unreadCount > 0 && (

@@ -9,7 +9,7 @@ import {
   Package, Clock, CheckCircle2, XCircle, Truck,
   RefreshCw, Search, Settings, ChevronRight,
   User, BookOpen, Hash, Calendar, KeyRound, X, Wifi, LogOut,
-  AlertCircle, Loader2, Check, AlertTriangle, Wrench, Bell, History, GraduationCap
+  AlertCircle, Loader2, Check, AlertTriangle, Wrench, Bell, History, GraduationCap, QrCode
 } from 'lucide-react'
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
@@ -120,7 +120,7 @@ function BadgeEstado({ estado }: { estado: string }) {
   return <span className={cfg.cls}>{cfg.icon}{cfg.label}</span>
 }
 
-// ─── Modal código de entrega ─────────────────────────────────────────────────
+// ─── Modal código de entrega con escáner QR ──────────────────────────────────
 function ModalCodigo({
   solicitud,
   onClose,
@@ -130,25 +130,114 @@ function ModalCodigo({
   onClose: () => void
   onEntregado: () => void
 }) {
+  const [tab, setTab] = useState<'qr' | 'manual'>('qr')
   const [codigo, setCodigo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'detected' | 'error'>('idle')
+  const [scanMsg, setScanMsg] = useState('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const rafRef = useRef<number | null>(null)
 
-  async function confirmar() {
-    if (codigo.length !== 6) { setError('El código tiene 6 dígitos'); return }
+  // Detener cámara al desmontar o cambiar de tab
+  useEffect(() => {
+    return () => stopCamera()
+  }, [])
+
+  function stopCamera() {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+  }
+
+  async function startScanner() {
+    setScanStatus('scanning')
+    setScanMsg('Apuntando cámara al QR del alumno...')
+    setError(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      scanFrame()
+    } catch {
+      setScanStatus('error')
+      setScanMsg('No se pudo acceder a la cámara. Usa el código manual.')
+    }
+  }
+
+  async function scanFrame() {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || video.readyState < 2) {
+      rafRef.current = requestAnimationFrame(scanFrame)
+      return
+    }
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0)
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+    let detectedCode: string | null = null
+
+    // Intento 1: BarcodeDetector nativo (Android Chrome)
+    if ('BarcodeDetector' in window) {
+      try {
+        // @ts-ignore
+        const detector = new BarcodeDetector({ formats: ['qr_code'] })
+        const codes = await detector.detect(canvas)
+        if (codes.length > 0) detectedCode = codes[0].rawValue
+      } catch {}
+    }
+
+    // Intento 2: jsQR como fallback (iOS Safari, Firefox, etc.)
+    if (!detectedCode) {
+      try {
+        const jsQR = (await import('jsqr')).default
+        const result = jsQR(imageData.data, imageData.width, imageData.height)
+        if (result) detectedCode = result.data
+      } catch {}
+    }
+
+    if (detectedCode) {
+      stopCamera()
+      const clean = detectedCode.replace(/\D/g, '').slice(0, 6)
+      setCodigo(clean)
+      setScanStatus('detected')
+      setScanMsg(`✅ QR detectado — código: ${clean}`)
+      // Confirmar automáticamente si el código es válido
+      if (clean.length === 6) {
+        await confirmarCodigo(clean)
+      }
+    } else {
+      rafRef.current = requestAnimationFrame(scanFrame)
+    }
+  }
+
+  async function confirmarCodigo(c: string) {
+    if (c.length !== 6) { setError('El código tiene 6 dígitos'); return }
     setLoading(true)
     setError(null)
     try {
       const res = await fetch(`/api/panel/${solicitud.id}/entregar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo }),
+        body: JSON.stringify({ codigo: c }),
       })
       const json = await res.json()
-      if (!res.ok) { setError(json.error || 'Error al confirmar'); return }
+      if (!res.ok) { setError(json.error || 'Error al confirmar'); setScanStatus('idle'); return }
       onEntregado()
     } catch {
       setError('Error de conexión')
+      setScanStatus('idle')
     } finally {
       setLoading(false)
     }
@@ -157,95 +246,151 @@ function ModalCodigo({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
-      <div className="card p-6 w-full max-w-sm animate-fade-in">
+      <div className="card w-full max-w-sm animate-fade-in overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--nacap-red)' }}>
-              Confirmar Entrega
-            </p>
-            <h2 className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>
-              Código del Pañol
-            </h2>
+        <div className="p-5 pb-0">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--nacap-red)' }}>
+                Confirmar Entrega
+              </p>
+              <h2 className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>
+                {solicitud.alumno}
+              </h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{solicitud.asignatura}</p>
+            </div>
+            <button onClick={() => { stopCamera(); onClose() }}
+              className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+              style={{ color: 'var(--text-muted)' }}>
+              <X size={18} />
+            </button>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 transition-colors"
-            style={{ color: 'var(--text-muted)' }}>
-            <X size={18} />
-          </button>
-        </div>
 
-        {/* Info alumno */}
-        <div className="rounded-xl p-3 mb-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2 mb-1">
-            <User size={13} style={{ color: 'var(--text-muted)' }} />
-            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{solicitud.alumno}</span>
-            {solicitud.carrera && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--nacap-red)', color: 'white' }}>{solicitud.carrera}</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mb-1">
-            <Hash size={13} style={{ color: 'var(--text-muted)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{solicitud.rut}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <BookOpen size={13} style={{ color: 'var(--text-muted)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{solicitud.asignatura}</span>
-          </div>
-        </div>
-
-        {/* Materiales */}
-        <div className="mb-4">
-          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
-            Materiales a entregar
-          </p>
-          <div className="space-y-1">
-            {(solicitud.items || []).map((item, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-black"
-                  style={{ background: 'var(--nacap-red)', color: 'white' }}>
-                  {item.cantidad}
-                </span>
-                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{item.descripcion}</span>
-              </div>
-            ))}
+          {/* Tabs */}
+          <div className="flex rounded-xl overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <button
+              onClick={() => { stopCamera(); setTab('qr'); setScanStatus('idle') }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold transition-all ${
+                tab === 'qr' ? 'rounded-xl' : 'text-gray-500'
+              }`}
+              style={tab === 'qr' ? { background: 'var(--nacap-red)', color: 'white' } : {}}
+            >
+              <QrCode size={13} /> Escanear QR
+            </button>
+            <button
+              onClick={() => { stopCamera(); setTab('manual'); setScanStatus('idle') }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold transition-all ${
+                tab === 'manual' ? 'rounded-xl' : 'text-gray-500'
+              }`}
+              style={tab === 'manual' ? { background: 'rgba(255,255,255,0.08)', color: 'var(--text-primary)' } : {}}
+            >
+              <KeyRound size={13} /> Código Manual
+            </button>
           </div>
         </div>
 
-        {/* Código */}
-        <div className="mb-4">
-          <label className="label flex items-center gap-2">
-            <KeyRound size={13} />
-            Código de entrega (del correo)
-          </label>
-          <input
-            value={codigo}
-            onChange={e => { setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(null) }}
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            className="input-field text-center text-3xl font-black tracking-[.4em]"
-            placeholder="000000"
-            style={{ letterSpacing: '.4em' }}
-          />
+        <div className="px-5 pb-5">
+          {/* Materiales */}
+          <div className="mb-4 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+            <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Materiales</p>
+            <div className="space-y-1">
+              {(solicitud.items || []).map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-black"
+                    style={{ background: 'var(--nacap-red)', color: 'white' }}>
+                    {item.cantidad}
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.descripcion}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* TAB: Escanear QR */}
+          {tab === 'qr' && (
+            <div>
+              {scanStatus === 'idle' && (
+                <button
+                  onClick={startScanner}
+                  className="btn-primary w-full py-3 mb-3"
+                >
+                  <QrCode size={16} /> Activar Cámara y Escanear
+                </button>
+              )}
+
+              {scanStatus === 'scanning' && (
+                <div className="mb-3">
+                  <div className="relative rounded-xl overflow-hidden bg-black" style={{ aspectRatio: '4/3' }}>
+                    <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+                    {/* Guía de encuadre */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-44 h-44 border-2 border-white/60 rounded-2xl" />
+                    </div>
+                  </div>
+                  <p className="text-xs text-center text-gray-400 mt-2">{scanMsg}</p>
+                </div>
+              )}
+
+              {scanStatus === 'detected' && (
+                <div className="text-center py-4">
+                  <p className="text-sm font-bold text-green-400 mb-1">{scanMsg}</p>
+                  {loading && <span className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin inline-block" />}
+                </div>
+              )}
+
+              {scanStatus === 'error' && (
+                <div className="mb-3">
+                  <p className="text-xs text-center text-amber-400 mb-3">{scanMsg}</p>
+                  <button onClick={() => setTab('manual')} className="btn-secondary w-full py-2 text-xs">
+                    Usar código manual
+                  </button>
+                </div>
+              )}
+
+              {/* Canvas oculto para análisis de frames */}
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+          )}
+
+          {/* TAB: Código Manual */}
+          {tab === 'manual' && (
+            <div>
+              <label className="label flex items-center gap-2">
+                <KeyRound size={13} />
+                Código de 6 dígitos
+              </label>
+              <input
+                value={codigo}
+                onChange={e => { setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(null) }}
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                className="input-field text-center text-3xl font-black tracking-[.4em] mb-4"
+                placeholder="000000"
+                style={{ letterSpacing: '.4em' }}
+                autoFocus
+              />
+              <button
+                onClick={() => confirmarCodigo(codigo)}
+                disabled={loading || codigo.length !== 6}
+                className="btn-success w-full py-3"
+              >
+                {loading ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <><Truck size={16} /> Confirmar Entrega</>
+                )}
+              </button>
+            </div>
+          )}
+
           {error && (
-            <p className="text-xs mt-2 flex items-center gap-1" style={{ color: 'var(--nacap-red)' }}>
+            <p className="text-xs mt-3 flex items-center gap-1" style={{ color: 'var(--nacap-red)' }}>
               <XCircle size={12} /> {error}
             </p>
           )}
         </div>
-
-        <button
-          onClick={confirmar}
-          disabled={loading || codigo.length !== 6}
-          className="btn-success w-full py-3"
-        >
-          {loading ? (
-            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <><Truck size={16} /> Confirmar Entrega</>
-          )}
-        </button>
       </div>
     </div>
   )

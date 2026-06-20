@@ -1,12 +1,67 @@
-import { CheckCircle2, Clock, Bell } from 'lucide-react'
-import Link from 'next/link'
+'use client'
 
-export default async function ConfirmacionPage({
+import { useState, useEffect } from 'react'
+import { CheckCircle2, Clock, Bell, XCircle, QrCode, KeyRound } from 'lucide-react'
+import Link from 'next/link'
+import { supabaseClient } from '@/lib/supabase-client'
+import QRCode from 'qrcode'
+
+interface SolicitudEstado {
+  estado: string
+  codigo_entrega: string | null
+  alumno: string
+  asignatura: string
+}
+
+export default function ConfirmacionPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  const { id } = await params
+  const [id, setId] = useState<string>('')
+  const [solicitud, setSolicitud] = useState<SolicitudEstado | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Resolver params async
+  useEffect(() => {
+    params.then(p => setId(p.id))
+  }, [params])
+
+  // Cargar estado de la solicitud y polling cada 10s
+  useEffect(() => {
+    if (!id) return
+
+    async function fetchEstado() {
+      const { data } = await supabaseClient
+        .from('solicitudes')
+        .select('estado, codigo_entrega, alumno, asignatura')
+        .eq('id', id)
+        .single()
+
+      if (data) {
+        setSolicitud(data)
+        // Generar QR si está aprobada
+        if (data.estado === 'APROBADA' && data.codigo_entrega) {
+          try {
+            const url = await QRCode.toDataURL(data.codigo_entrega, {
+              width: 280,
+              margin: 2,
+              color: { dark: '#FFFFFF', light: '#0D1B2E' },
+              errorCorrectionLevel: 'H',
+            })
+            setQrDataUrl(url)
+          } catch {}
+        }
+      }
+      setLoading(false)
+    }
+
+    fetchEstado()
+    // Polling cada 10s para detectar cuando el docente aprueba
+    const interval = setInterval(fetchEstado, 10000)
+    return () => clearInterval(interval)
+  }, [id])
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4 py-12"
@@ -14,100 +69,188 @@ export default async function ConfirmacionPage({
 
       <div className="max-w-md w-full animate-fade-in">
 
-        {/* Ícono de éxito */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full mb-6"
-            style={{ background: 'rgba(34, 197, 94, 0.12)', border: '2px solid rgba(34, 197, 94, 0.3)' }}>
-            <CheckCircle2 size={48} style={{ color: '#22C55E' }} />
-          </div>
-
+        {/* Header INACAP */}
+        <div className="text-center mb-6">
           <div className="flex items-center justify-center gap-2 mb-3">
             <div className="w-1 h-8 rounded-full" style={{ background: 'var(--nacap-red)' }} />
             <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'var(--nacap-red)' }}>
               Área Mecánica — INACAP
             </span>
           </div>
-
-          <h1 className="text-3xl font-black mb-2" style={{ color: 'var(--text-primary)' }}>
-            ¡Solicitud Enviada!
-          </h1>
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Tu solicitud fue registrada exitosamente.
-          </p>
         </div>
 
-        {/* Pasos de seguimiento */}
-        <div className="card p-6 mb-5">
-          <h2 className="text-sm font-bold uppercase tracking-wider mb-5" style={{ color: 'var(--text-secondary)' }}>
-            ¿Qué sigue?
-          </h2>
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
-                <Bell size={16} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  Notificación al docente
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Tu docente recibió una notificación push con los detalles. Deberá aprobar la solicitud.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(96,165,250,0.12)', color: '#60A5FA' }}>
-                <Clock size={16} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  Espera la aprobación
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Una vez aprobada, el pañol recibirá la notificación para preparar tus materiales.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E' }}>
-                <CheckCircle2 size={16} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  Retira en el pañol
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Preséntate al pañol mecánico con tu RUT para retirar los materiales.
-                </p>
-              </div>
-            </div>
+        {loading ? (
+          <div className="card p-10 flex flex-col items-center gap-4">
+            <span className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            <p className="text-sm text-gray-400">Cargando estado de tu solicitud...</p>
           </div>
-        </div>
+        ) : solicitud?.estado === 'APROBADA' ? (
+          /* ── APROBADA: mostrar QR prominente ── */
+          <>
+            <div className="text-center mb-5">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-4"
+                style={{ background: 'rgba(34, 197, 94, 0.12)', border: '2px solid rgba(34, 197, 94, 0.3)' }}>
+                <CheckCircle2 size={40} style={{ color: '#22C55E' }} />
+              </div>
+              <h1 className="text-2xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
+                ¡Solicitud Aprobada!
+              </h1>
+              <p className="text-sm text-gray-400">
+                Preséntate en el pañol y muestra este QR al pañolero.
+              </p>
+            </div>
 
-        {/* ID de referencia */}
-        <div className="card p-4 mb-6">
-          <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>
-            ID de referencia
-          </p>
-          <p className="text-center font-mono text-sm font-bold mt-1" style={{ color: 'var(--text-secondary)' }}>
-            {id.slice(0, 8).toUpperCase()}
-          </p>
-        </div>
+            {/* QR Code */}
+            {qrDataUrl && (
+              <div className="card p-6 mb-4 flex flex-col items-center"
+                style={{ background: 'rgba(34,197,94,0.04)', borderColor: 'rgba(34,197,94,0.2)' }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <QrCode size={16} style={{ color: '#22C55E' }} />
+                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#22C55E' }}>
+                    Código QR de Retiro
+                  </p>
+                </div>
+                <img
+                  src={qrDataUrl}
+                  alt="QR de retiro"
+                  className="rounded-2xl"
+                  style={{ width: 240, height: 240 }}
+                />
+                {/* Código numérico debajo como respaldo */}
+                <div className="mt-4 flex items-center gap-2">
+                  <KeyRound size={13} style={{ color: 'var(--text-muted)' }} />
+                  <p className="text-xs text-gray-500">Código manual:</p>
+                  <span className="font-mono font-black text-lg tracking-[.3em]"
+                    style={{ color: 'var(--text-primary)' }}>
+                    {solicitud.codigo_entrega}
+                  </span>
+                </div>
+              </div>
+            )}
 
-        {/* Botón volver */}
-        <Link href="/solicitud" className="btn-primary w-full justify-center py-4">
-          Nueva Solicitud
-        </Link>
-        <div className="mt-3 text-center">
-          <Link href="/" className="text-sm hover:underline" style={{ color: 'var(--text-muted)' }}>
-            Volver al inicio
-          </Link>
-        </div>
+            {/* Info solicitud */}
+            <div className="card p-4 mb-5">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-gray-500">Alumno:</span>
+                <span className="text-xs font-bold text-white">{solicitud.alumno}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Asignatura:</span>
+                <span className="text-xs font-semibold text-gray-300">{solicitud.asignatura}</span>
+              </div>
+            </div>
+
+            <Link href="/solicitud" className="btn-primary w-full justify-center py-4">
+              Nueva Solicitud
+            </Link>
+          </>
+        ) : solicitud?.estado === 'RECHAZADA' ? (
+          /* ── RECHAZADA ── */
+          <>
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-4"
+                style={{ background: 'rgba(239, 68, 68, 0.12)', border: '2px solid rgba(239, 68, 68, 0.3)' }}>
+                <XCircle size={40} style={{ color: '#EF4444' }} />
+              </div>
+              <h1 className="text-2xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
+                Solicitud Rechazada
+              </h1>
+              <p className="text-sm text-gray-400">
+                Tu docente rechazó esta solicitud. Revisa el motivo y consulta directamente.
+              </p>
+            </div>
+            <Link href="/solicitud" className="btn-primary w-full justify-center py-4">
+              Nueva Solicitud
+            </Link>
+          </>
+        ) : (
+          /* ── PENDIENTE / default ── */
+          <>
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-4"
+                style={{ background: 'rgba(34, 197, 94, 0.12)', border: '2px solid rgba(34, 197, 94, 0.3)' }}>
+                <CheckCircle2 size={40} style={{ color: '#22C55E' }} />
+              </div>
+              <h1 className="text-2xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
+                ¡Solicitud Enviada!
+              </h1>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Tu solicitud fue registrada exitosamente.
+              </p>
+            </div>
+
+            <div className="card p-6 mb-5">
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-5" style={{ color: 'var(--text-secondary)' }}>
+                ¿Qué sigue?
+              </h2>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
+                    <Bell size={16} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      Notificación al docente
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                      Tu docente recibió una notificación push con los detalles. Deberá aprobar la solicitud.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(96,165,250,0.12)', color: '#60A5FA' }}>
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      Espera la aprobación
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                      Esta página se actualiza automáticamente. Cuando el docente apruebe, verás el QR de retiro aquí.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E' }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      Retira en el pañol
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                      Preséntate al pañol mecánico con tu RUT y el QR que aparecerá aquí al ser aprobado.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ID de referencia */}
+            <div className="card p-4 mb-6">
+              <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>
+                ID de referencia
+              </p>
+              <p className="text-center font-mono text-sm font-bold mt-1" style={{ color: 'var(--text-secondary)' }}>
+                {id.slice(0, 8).toUpperCase()}
+              </p>
+            </div>
+
+            <Link href="/solicitud" className="btn-primary w-full justify-center py-4">
+              Nueva Solicitud
+            </Link>
+            <div className="mt-3 text-center">
+              <Link href="/" className="text-sm hover:underline" style={{ color: 'var(--text-muted)' }}>
+                Volver al inicio
+              </Link>
+            </div>
+          </>
+        )}
       </div>
     </main>
   )
