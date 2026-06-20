@@ -123,7 +123,7 @@ export default function AdminPage() {
   const [docentes, setDocentes] = useState<Docente[]>([])
   const [alumnos, setAlumnos] = useState<any[]>([])
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
-  const [correosFallidos, setCorreosFallidos] = useState<any[]>([])
+
   
   // Counts / Database Diagnostics
   const [stats, setStats] = useState({
@@ -341,55 +341,32 @@ export default function AdminPage() {
     else setRefreshing(true)
 
     try {
-      // 1. Fetch Docentes
-      const { data: docData, error: docErr } = await supabaseBrowser
-        .from('docentes')
-        .select('*')
-        .order('nombre')
+      // 1. Fetch Docentes, Alumnos, Solicitudes and Diagnostics in parallel
+      const [
+        { data: docData, error: docErr },
+        { data: alData, error: alErr },
+        { data: solData, error: solErr },
+        { count: countDiurno },
+        { count: countVespertino },
+        { count: countIMI },
+        { count: countMI }
+      ] = await Promise.all([
+        supabaseBrowser.from('docentes').select('*').order('nombre'),
+        supabaseBrowser.from('perfiles').select('*').eq('rol', 'ALUMNO').order('nombre'),
+        supabaseBrowser.from('solicitudes').select('*, docente:docentes(nombre), items:items_solicitud(*)').order('created_at', { ascending: false }),
+        supabaseBrowser.from('perfiles').select('*', { count: 'exact', head: true }).eq('rol', 'ALUMNO').eq('jornada', 'D'),
+        supabaseBrowser.from('perfiles').select('*', { count: 'exact', head: true }).eq('rol', 'ALUMNO').eq('jornada', 'V'),
+        supabaseBrowser.from('asignaturas').select('*', { count: 'exact', head: true }).eq('carrera', 'IMI'),
+        supabaseBrowser.from('asignaturas').select('*', { count: 'exact', head: true }).eq('carrera', 'MI')
+      ])
+
       if (docErr) throw docErr
-      setDocentes(docData || [])
-
-      // 2. Fetch Alumnos (public.perfiles where rol = 'ALUMNO')
-      const { data: alData, error: alErr } = await supabaseBrowser
-        .from('perfiles')
-        .select('*')
-        .eq('rol', 'ALUMNO')
-        .order('nombre')
       if (alErr) throw alErr
-      setAlumnos(alData || [])
-
-      // 3. Fetch Solicitudes (with teacher relations)
-      const { data: solData, error: solErr } = await supabaseBrowser
-        .from('solicitudes')
-        .select('*, docente:docentes(nombre), items:items_solicitud(*)')
-        .order('created_at', { ascending: false })
       if (solErr) throw solErr
+
+      setDocentes(docData || [])
+      setAlumnos(alData || [])
       setSolicitudes(solData || [])
-
-      // 4. Fetch Diagnostics statistics
-      // Alumnos count
-      const { count: countDiurno } = await supabaseBrowser
-        .from('perfiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('rol', 'ALUMNO')
-        .eq('jornada', 'D')
-
-      const { count: countVespertino } = await supabaseBrowser
-        .from('perfiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('rol', 'ALUMNO')
-        .eq('jornada', 'V')
-
-      // Asignaturas count
-      const { count: countIMI } = await supabaseBrowser
-        .from('asignaturas')
-        .select('*', { count: 'exact', head: true })
-        .eq('carrera', 'IMI')
-
-      const { count: countMI } = await supabaseBrowser
-        .from('asignaturas')
-        .select('*', { count: 'exact', head: true })
-        .eq('carrera', 'MI')
 
       setStats({
         alumnosDiurno: countDiurno || 0,
@@ -397,19 +374,6 @@ export default function AdminPage() {
         asignaturasIMI: countIMI || 0,
         asignaturasMI: countMI || 0,
       })
-
-      // 5. Fetch failed email logs (correos_fallidos)
-      const { data: failEmails, error: failEmailsErr } = await supabaseBrowser
-        .from('correos_fallidos')
-        .select('*')
-        .order('fecha', { ascending: false })
-      
-      if (!failEmailsErr) {
-        setCorreosFallidos(failEmails || [])
-      } else {
-        console.warn("Tabla correos_fallidos no disponible o sin políticas RLS:", failEmailsErr.message)
-        setCorreosFallidos([])
-      }
 
     } catch (e: any) {
       console.error("Error fetching data in Admin Dashboard:", e)
@@ -652,22 +616,7 @@ export default function AdminPage() {
     }
   }
 
-  const handleLimpiarCorreosFallidos = async () => {
-    if (!confirm('¿Estás seguro de que deseas vaciar el historial de correos fallidos?')) return
-    try {
-      const { error } = await supabaseBrowser
-        .from('correos_fallidos')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000') // Borrar todos
-      
-      if (error) throw error
-      setCorreosFallidos([])
-      showNotification('ok', 'Historial de correos fallidos limpiado con éxito.')
-    } catch (err: any) {
-      console.error('Error al limpiar correos fallidos:', err.message)
-      showNotification('err', 'No se pudo limpiar el historial: ' + err.message)
-    }
-  }
+
 
   // ─── Control Administrativo de Solicitudes ──────────────────────────────────
   const forceUpdateSolicitudEstado = async (id: string, nuevoEstado: EstadoSolicitud) => {
@@ -923,12 +872,6 @@ export default function AdminPage() {
             >
               {tab.icon}
               <span>{tab.label}</span>
-              {tab.id === 'diagnostico' && correosFallidos.length > 0 && (
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-              )}
             </button>
           ))}
           {/* Separador + link a módulo de Mantención */}
@@ -1787,74 +1730,17 @@ export default function AdminPage() {
                 </div>
 
               </div>
-
-              {/* Alertas de correos fallidos */}
-              <div className="card p-5 space-y-4 mt-6 animate-fade-in">
-                <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                  <h3 className="font-extrabold text-sm uppercase tracking-wider text-red-500 flex items-center gap-2">
-                    <AlertTriangle className="text-red-500 animate-pulse" size={16} /> Alertas de Comunicación: Correos Fallidos
-                  </h3>
-                  {correosFallidos.length > 0 && (
-                    <button
-                      onClick={handleLimpiarCorreosFallidos}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/20 text-xs font-bold transition-all cursor-pointer"
-                    >
-                      <Trash2 size={12} /> Limpiar Historial
-                    </button>
-                  )}
+              {/* System State (replaces old failed emails) */}
+              <div className="card p-5 space-y-4 mt-6 animate-fade-in border-l-4 border-l-blue-500 bg-blue-900/10">
+                <div className="flex items-start gap-4">
+                  <Database size={24} className="text-blue-400 mt-1" />
+                  <div>
+                    <h3 className="text-lg font-black text-white mb-2">Estado del Sistema</h3>
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                      La conexión a la base de datos de Supabase está operando correctamente. El sistema utiliza notificaciones PWA nativas push, eliminando completamente la dependencia de proveedores de correo electrónico (Brevo/Resend).
+                    </p>
+                  </div>
                 </div>
-
-                {correosFallidos.length === 0 ? (
-                  <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20 flex items-start gap-3">
-                    <CheckCircle2 className="text-green-500 flex-shrink-0 mt-0.5" size={16} />
-                    <div>
-                      <p className="font-bold text-xs text-green-400">Todo en orden</p>
-                      <p className="text-[11px] text-gray-400">No se registran fallos en los envíos de correo. El sistema funciona correctamente con Brevo (Primario) y Resend (Fallback).</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                      ⚠️ <strong>Atención:</strong> Se han detectado {correosFallidos.length} intentos de correo fallidos en los que tanto Brevo como Resend no respondieron. Verifica las llaves API en <code className="text-white bg-black/40 px-1 rounded">.env.local</code>.
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="nacap-table w-full text-left text-[11px]">
-                        <thead>
-                          <tr className="border-b border-white/10 text-gray-400">
-                            <th className="py-2 px-3 font-semibold">Fecha / Hora</th>
-                            <th className="py-2 px-3 font-semibold">Destinatario</th>
-                            <th className="py-2 px-3 font-semibold">Asunto</th>
-                            <th className="py-2 px-3 font-semibold">Error Brevo</th>
-                            <th className="py-2 px-3 font-semibold">Error Resend</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {correosFallidos.map((log: any) => (
-                            <tr key={log.id} className="border-b border-white/5 hover:bg-white/2">
-                              <td className="py-2.5 px-3 text-gray-400 whitespace-nowrap">
-                                {formatFechaHora(log.fecha)}
-                              </td>
-                              <td className="py-2.5 px-3 font-bold text-white">
-                                {log.destinatario_nombre} <br />
-                                <span className="font-normal text-[10px] text-gray-400">{log.destinatario}</span>
-                              </td>
-                              <td className="py-2.5 px-3 text-gray-300 max-w-[200px] truncate" title={log.asunto}>
-                                {log.asunto}
-                              </td>
-                              <td className="py-2.5 px-3 text-red-400 font-mono text-[10px] max-w-[200px] break-words">
-                                {log.error_brevo || '—'}
-                              </td>
-                              <td className="py-2.5 px-3 text-red-400 font-mono text-[10px] max-w-[200px] break-words">
-                                {log.error_resend || '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
               </div>
             </>
           )}
