@@ -1,13 +1,25 @@
 'use client'
-// src/components/PushHandler.tsx — Maneja la suscripción a Web Push nativo (sin Firebase) e invalidación de caché PWA
+// src/components/PushHandler.tsx — Maneja la suscripción a Web Push nativo e invalidación de caché PWA
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import { subscribeToPush } from '@/lib/push'
+import { RefreshCw, X } from 'lucide-react'
 
-const CURRENT_VERSION = '1.2.0'
+const CURRENT_VERSION = '1.3.0'
 
 export default function PushHandler() {
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+
+  const applyUpdate = () => {
+    if (typeof caches !== 'undefined') {
+      caches.keys().then((names) => Promise.all(names.map(name => caches.delete(name))))
+        .then(() => window.location.reload())
+    } else {
+      window.location.reload()
+    }
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -74,16 +86,8 @@ export default function PushHandler() {
             installingWorker.onstatechange = () => {
               if (installingWorker.state === 'installed') {
                 if (navigator.serviceWorker.controller) {
-                  console.log('[PushHandler] Nueva versión de Service Worker lista. Actualizando caché...')
-                  if (typeof caches !== 'undefined') {
-                    caches.keys().then((names) => {
-                      return Promise.all(names.map(name => caches.delete(name)))
-                    }).then(() => {
-                      window.location.reload()
-                    })
-                  } else {
-                    window.location.reload()
-                  }
+                  console.log('[PushHandler] Nueva versión de Service Worker lista. Mostrando banner de actualización...')
+                  setUpdateAvailable(true)
                 }
               }
             }
@@ -131,5 +135,31 @@ export default function PushHandler() {
     }
   }, [])
 
-  return null
+  if (!updateAvailable) return null
+
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-fade-in px-4 w-full max-w-sm">
+      <div className="bg-[#0D1B2E] border border-blue-500/30 shadow-2xl shadow-blue-900/20 rounded-2xl p-4 flex items-center gap-4">
+        <div className="bg-blue-500/10 p-2 rounded-full">
+          <RefreshCw size={20} className="text-blue-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white mb-0.5">Actualización disponible</p>
+          <p className="text-xs text-gray-400">Hay una nueva versión de la aplicación lista para usarse.</p>
+        </div>
+        <button
+          onClick={applyUpdate}
+          className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors whitespace-nowrap"
+        >
+          Refrescar
+        </button>
+        <button 
+          onClick={() => setUpdateAvailable(false)}
+          className="text-gray-500 hover:text-white p-1"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  )
 }
