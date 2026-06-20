@@ -74,15 +74,11 @@ export async function subscribeToPush(
   }
 
   console.log('[push] Guardando suscripción en Supabase (tabla push_subscriptions)...')
-  const { error } = await supabase.from('push_subscriptions').upsert(
-    {
-      user_id: userId,
-      endpoint: sub.endpoint,
-      p256dh: sub.keys.p256dh,
-      auth: sub.keys.auth,
-    },
-    { onConflict: 'endpoint' }
-  )
+  const { error } = await supabase.rpc('upsert_push_subscription', {
+    p_endpoint: sub.endpoint,
+    p_p256dh: sub.keys.p256dh,
+    p_auth: sub.keys.auth
+  })
 
   if (error) {
     console.error('[push] ❌ Error guardando suscripción en Supabase:', error)
