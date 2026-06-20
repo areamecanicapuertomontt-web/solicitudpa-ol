@@ -50,9 +50,6 @@ export default function ConfirmacionPage({
           }).then(setQrDataUrl).catch(() => {})
         }
       }
-    }
-
-      }
       setLoading(false)
     }
 
