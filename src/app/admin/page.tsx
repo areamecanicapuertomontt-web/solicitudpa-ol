@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { Docente, Solicitud, Jornada, EstadoSolicitud } from '@/lib/types'
+import { BadgeEstado } from '@/components/BadgeEstado'
 import NotificationBell from '@/components/NotificationBell'
 import HelpButton from '@/components/HelpButton'
 
@@ -970,15 +971,7 @@ export default function AdminPage() {
                                 <td className="font-semibold">{sol.alumno}</td>
                                 <td>{(sol.asignatura || '').split(' ')[0]} — {sol.seccion}</td>
                                 <td>
-                                  <span className={`badge ${
-                                    sol.estado === 'PENDIENTE' ? 'badge-pending' :
-                                    sol.estado === 'APROBADA' ? 'badge-approved' :
-                                    sol.estado === 'DEVUELTA' ? 'badge-approved' :
-                                    sol.estado === 'RECHAZADA' ? 'badge-rejected' :
-                                    sol.estado === 'DEVUELTA_INCOMPLETA' ? 'badge-pending' : 'badge-delivered'
-                                  }`}>
-                                    {sol.estado}
-                                  </span>
+                                  <BadgeEstado estado={sol.estado} />
                                 </td>
                                 <td className="text-xs text-gray-400">{new Date(sol.created_at).toLocaleDateString()}</td>
                               </tr>
@@ -1473,24 +1466,16 @@ export default function AdminPage() {
                               }}
                             >
                               <div className="min-w-0">
-                                <p className="font-bold text-sm text-white truncate">{sol.alumno}</p>
+                                <p className="font-bold text-sm text-white line-clamp-2 break-words">{sol.alumno}</p>
                                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mt-1">
                                   <span>RUT: <strong className="text-gray-300 font-medium">{sol.rut}</strong></span>
                                   <span>Jornada: <strong className="text-gray-300 font-medium">{getJornadaLabel(sol.jornada)}</strong></span>
-                                  <span className="truncate">Asignatura: <strong className="text-gray-300 font-medium">{(sol.asignatura || '').split(' ')[0]}</strong></span>
+                                  <span className="whitespace-normal break-words">Asignatura: <strong className="text-gray-300 font-medium">{(sol.asignatura || '').split(' ')[0]}</strong></span>
                                 </div>
                               </div>
 
                               <div className="flex sm:flex-col items-end gap-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-white/5 pt-2 sm:pt-0">
-                                <span className={`badge ${
-                                  sol.estado === 'PENDIENTE' ? 'badge-pending' :
-                                  sol.estado === 'APROBADA' ? 'badge-approved' :
-                                  sol.estado === 'DEVUELTA' ? 'badge-approved' :
-                                  sol.estado === 'RECHAZADA' ? 'badge-rejected' :
-                                  sol.estado === 'DEVUELTA_INCOMPLETA' ? 'badge-pending' : 'badge-delivered'
-                                }`}>
-                                  {sol.estado}
-                                </span>
+                                <BadgeEstado estado={sol.estado} />
                                 <span className="text-[10px] text-gray-500">
                                   {formatFechaHora(sol.created_at)}
                                 </span>
@@ -1536,7 +1521,7 @@ export default function AdminPage() {
                         </div>
                         <div className="flex justify-between py-1.5 border-b border-white/3">
                           <span className="text-gray-400 font-bold">Asignatura:</span>
-                          <span className="font-semibold text-white text-right truncate max-w-[200px]" title={selectedSolicitud.asignatura}>
+                          <span className="font-semibold text-white text-right line-clamp-2 break-words max-w-[200px]" title={selectedSolicitud.asignatura}>
                             {selectedSolicitud.asignatura}
                           </span>
                         </div>
@@ -1755,7 +1740,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={cancelAlumnoForm}
-                className="absolute right-4 top-4 p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                className="absolute right-2 top-2 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
               >
                 <X size={16} />
               </button>
@@ -1956,3 +1941,4 @@ export default function AdminPage() {
     </main>
   )
 }
+

@@ -38,6 +38,7 @@ import {
   RotateCcw,
   ChevronRight
 } from 'lucide-react'
+import { BadgeEstado } from '@/components/BadgeEstado'
 import type { Docente } from '@/lib/types'
 import { supabaseClient } from '@/lib/supabase-client'
 import QRCode from 'qrcode'
@@ -131,14 +132,7 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
     return () => clearInterval(interval)
   }, [profile])
 
-  const ESTADO_CFG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-    PENDIENTE:          { label: 'Pendiente',          color: '#F59E0B', icon: <Clock size={12} /> },
-    APROBADA:           { label: 'Aprobada',           color: '#22C55E', icon: <CheckCircle size={12} /> },
-    RECHAZADA:          { label: 'Rechazada',           color: '#EF4444', icon: <XCircle size={12} /> },
-    ENTREGADA:          { label: 'Entregada',           color: '#60A5FA', icon: <Truck size={12} /> },
-    DEVUELTA:           { label: 'Devuelta',            color: '#A78BFA', icon: <RotateCcw size={12} /> },
-    DEVUELTA_INCOMPLETA:{ label: 'Dev. Incompleta',    color: '#F97316', icon: <RotateCcw size={12} /> },
-  }
+
 
   if (!profileLoaded) return (
     <div className="space-y-4 animate-pulse pt-4">
@@ -176,7 +170,6 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
   return (
     <div className="space-y-3 animate-fade-in">
       {solicitudes.map((s) => {
-        const cfg = ESTADO_CFG[s.estado] || ESTADO_CFG.PENDIENTE
         const isOpen = openSolicitudId === s.id
         const qr = qrMap[s.id]
 
@@ -190,17 +183,12 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span
-                    className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: `${cfg.color}18`, color: cfg.color, border: `1px solid ${cfg.color}40` }}
-                  >
-                    {cfg.icon} {cfg.label}
-                  </span>
+                  <BadgeEstado estado={s.estado} />
                   <span className="text-[10px] text-gray-500">
                     {new Date(s.created_at).toLocaleDateString('es-CL', { day:'2-digit', month:'short', year:'numeric' })}
                   </span>
                 </div>
-                <p className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>{s.asignatura}</p>
+                <p className="text-sm font-bold line-clamp-2 break-words" style={{ color: 'var(--text-primary)' }}>{s.asignatura}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{(s.items || []).length} material(es)</p>
               </div>
               <ChevronRight

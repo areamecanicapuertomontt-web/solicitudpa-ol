@@ -14,6 +14,7 @@ import {
 import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { Solicitud, EstadoSolicitud } from '@/lib/types'
+import { BadgeEstado } from '@/components/BadgeEstado'
 
 function Pagination({
   currentPage,
@@ -107,18 +108,6 @@ const ESTADOS: { value: EstadoSolicitud | 'TODAS'; label: string }[] = [
   { value: 'RECHAZADA', label: 'Rechazadas' },
 ]
 
-function BadgeEstado({ estado }: { estado: string }) {
-  const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-    PENDIENTE: { label: 'Pendiente', cls: 'badge-pending',   icon: <Clock size={11} /> },
-    APROBADA:  { label: 'Aprobada',  cls: 'badge-approved',  icon: <CheckCircle2 size={11} /> },
-    RECHAZADA: { label: 'Rechazada', cls: 'badge-rejected',  icon: <XCircle size={11} /> },
-    ENTREGADA: { label: 'Entregada', cls: 'badge-delivered', icon: <Truck size={11} /> },
-    DEVUELTA:  { label: 'Devuelta',  cls: 'badge-approved',  icon: <CheckCircle2 size={11} /> },
-    DEVUELTA_INCOMPLETA: { label: 'Falta Material ⚠️', cls: 'badge-pending', icon: <Clock size={11} /> },
-  }
-  const cfg = map[estado] || { label: estado, cls: 'badge', icon: null }
-  return <span className={cfg.cls}>{cfg.icon}{cfg.label}</span>
-}
 
 // ─── Modal código de entrega con escáner QR ──────────────────────────────────
 function ModalCodigo({
@@ -261,7 +250,7 @@ function ModalCodigo({
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{solicitud.asignatura}</p>
             </div>
             <button onClick={() => { stopCamera(); onClose() }}
-              className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+              className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
               style={{ color: 'var(--text-muted)' }}>
               <X size={18} />
             </button>
@@ -578,7 +567,7 @@ function DocenteView({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <User size={13} style={{ color: 'var(--text-muted)' }} />
-                        <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{sol.alumno}</p>
+                        <p className="font-bold text-sm line-clamp-2 break-words" style={{ color: 'var(--text-primary)' }}>{sol.alumno}</p>
                         {sol.carrera && <span className="text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0" style={{ background: 'rgba(220,38,38,0.2)', color: '#f87171' }}>{sol.carrera}</span>}
                       </div>
                       <div className="flex items-center gap-2 mb-0.5">
@@ -587,7 +576,7 @@ function DocenteView({
                       </div>
                       <div className="flex items-center gap-2">
                         <BookOpen size={12} style={{ color: 'var(--text-muted)' }} />
-                        <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{sol.asignatura} — {sol.seccion} ({getJornadaLabel(sol.jornada)})</p>
+                        <p className="text-xs line-clamp-2 break-words" style={{ color: 'var(--text-secondary)' }}>{sol.asignatura} — {sol.seccion} ({getJornadaLabel(sol.jornada)})</p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
@@ -598,7 +587,7 @@ function DocenteView({
 
                   <div className="flex flex-wrap gap-1 mb-2">
                     {(sol.items || []).slice(0, 3).map((item, i) => (
-                      <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
+                      <span key={i} className="text-xs px-2 py-0.5 rounded-full inline-block max-w-full break-words whitespace-normal text-left" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
                         {item.cantidad}× {item.descripcion}
                       </span>
                     ))}
@@ -1351,7 +1340,7 @@ export default function PanelPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <User size={13} style={{ color: 'var(--text-muted)' }} />
-                          <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>
+                          <p className="font-bold text-sm line-clamp-2 break-words" style={{ color: 'var(--text-primary)' }}>
                             {sol.alumno}
                           </p>
                           {sol.carrera && (
@@ -1364,7 +1353,7 @@ export default function PanelPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <BookOpen size={12} style={{ color: 'var(--text-muted)' }} />
-                          <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
+                          <p className="text-xs line-clamp-2 break-words" style={{ color: 'var(--text-secondary)' }}>
                             {sol.asignatura} — {sol.seccion} ({getJornadaLabel(sol.jornada)})
                           </p>
                         </div>
@@ -1378,8 +1367,7 @@ export default function PanelPage() {
                     {/* Items preview */}
                     <div className="flex flex-wrap gap-1 mb-2">
                       {(sol.items || []).slice(0, 3).map((item, i) => (
-                        <span key={i} className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
+                        <span key={i} className="text-xs px-2 py-0.5 rounded-full inline-block max-w-full break-words whitespace-normal text-left" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
                           {item.cantidad}× {item.descripcion}
                         </span>
                       ))}

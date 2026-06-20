@@ -147,7 +147,7 @@ export default function NotificationBell() {
       {/* Botón Campana */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="btn-secondary !p-2 relative flex items-center justify-center cursor-pointer"
+        className="btn-secondary !p-2 relative flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px]"
         title="Notificaciones"
       >
         <Bell size={16} className={unreadCount > 0 ? 'animate-bounce' : ''} />
@@ -160,13 +160,13 @@ export default function NotificationBell() {
 
       {/* Popover */}
       {isOpen && (
-        <div className="absolute right-0 mt-2.5 w-80 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-white/5 bg-[#0F1B2F]/95 shadow-2xl backdrop-blur-md z-50 overflow-hidden animate-fade-in">
+        <div className="fixed left-1/2 -translate-x-1/2 sm:absolute sm:left-auto sm:translate-x-0 sm:right-0 mt-2.5 w-[calc(100vw-2rem)] sm:w-80 rounded-2xl border border-white/5 bg-[#0F1B2F]/95 shadow-2xl backdrop-blur-md z-50 overflow-hidden animate-fade-in">
           <div className="p-3.5 border-b border-white/5 flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-wider text-white">Notificaciones</h3>
             {unreadCount > 0 && (
               <button
                 onClick={() => handleMarkAsRead()}
-                className="text-[10px] font-bold text-red-400 hover:text-red-300 flex items-center gap-1 cursor-pointer"
+                className="text-[10px] font-bold text-red-400 hover:text-red-300 flex items-center gap-1 cursor-pointer min-h-[44px] px-2"
               >
                 <CheckSquare size={11} />
                 Marcar leídas
