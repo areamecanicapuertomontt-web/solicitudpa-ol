@@ -89,8 +89,10 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
 
   useEffect(() => {
     if (!profile) return
+    let isInitial = true
+
     async function fetchMisSolicitudes() {
-      setLoading(true)
+      if (isInitial) setLoading(true)
       try {
         const orParts: string[] = []
         if (profile.email) orParts.push(`alumno_email.eq.${profile.email}`)
@@ -118,12 +120,13 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
         }))
         setQrMap(qrs)
       } finally {
+        isInitial = false
         setLoading(false)
       }
     }
     fetchMisSolicitudes()
 
-    // Refresco en tiempo real (polling cada 15s)
+    // Refresco en tiempo real (polling cada 15s silencioso sin parpadeo)
     const interval = setInterval(fetchMisSolicitudes, 15000)
     return () => clearInterval(interval)
   }, [profile])
