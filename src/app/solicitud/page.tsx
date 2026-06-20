@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useForm, useFieldArray } from 'react-hook-form'
@@ -60,6 +60,21 @@ const schema = z.object({
 })
 
 type FormData = z.infer<typeof schema>
+
+// ─── TabInitializer — aislado en Suspense para compatibilidad con Next.js SSG ──
+function TabInitializer({
+  onInit,
+}: {
+  onInit: (tab: 'form' | 'mis-solicitudes', id: string | null) => void
+}) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const tab = searchParams.get('tab') === 'mis-solicitudes' ? 'mis-solicitudes' : 'form'
+    const id = searchParams.get('id') ?? null
+    onInit(tab, id)
+  }, [searchParams, onInit])
+  return null
+}
 
 // ─── Mis Solicitudes ─────────────────────────────────────────────────────────
 function MisSolicitudes({ profile, openId }: { profile: any; openId: string | null }) {
@@ -267,11 +282,12 @@ function MisSolicitudes({ profile, openId }: { profile: any; openId: string | nu
 
 export default function SolicitudPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [activeTab, setActiveTab] = useState<'form' | 'mis-solicitudes'>(
-    searchParams.get('tab') === 'mis-solicitudes' ? 'mis-solicitudes' : 'form'
-  )
-  const openIdFromUrl = searchParams.get('id')
+  const [activeTab, setActiveTab] = useState<'form' | 'mis-solicitudes'>('form')
+  const [openIdFromUrl, setOpenIdFromUrl] = useState<string | null>(null)
+  const handleTabInit = useCallback((tab: 'form' | 'mis-solicitudes', id: string | null) => {
+    setActiveTab(tab)
+    setOpenIdFromUrl(id)
+  }, [])
   const [docentes, setDocentes] = useState<Docente[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -689,6 +705,10 @@ export default function SolicitudPage() {
         </div>
 
         {/* ── Contenido según tab activo ── */}
+        <Suspense fallback={null}>
+          <TabInitializer onInit={handleTabInit} />
+        </Suspense>
+
         {activeTab === 'mis-solicitudes' ? (
           <MisSolicitudes profile={profile} openId={openIdFromUrl} />
         ) : (
