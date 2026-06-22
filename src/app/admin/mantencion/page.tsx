@@ -246,8 +246,6 @@ export default function AdminMantencionPage() {
       const [
         { data: eqData },
         { data: secData },
-        { data: planData },
-        { data: actData },
         { data: perfData },
       ] = await Promise.all([
         supabaseBrowser
@@ -259,43 +257,17 @@ export default function AdminMantencionPage() {
           .select('*')
           .order('numero'),
         supabaseBrowser
-          .from('planes_mantencion')
-          .select('*')
-          .eq('activo', true)
-          .limit(1)
-          .maybeSingle(),
-        supabaseBrowser
-          .from('actividades_planificacion')
-          .select('*')
-          .order('numero'),
-        supabaseBrowser
           .from('perfiles')
-          .select('id, nombre, email, rol, activo')
+          .select('id, nombre, email, rol')
           .neq('rol', 'ALUMNO')
           .order('nombre'),
       ])
 
       setEquipos(eqData || [])
       setSecciones(secData || [])
-      setPlan(planData || null)
-      setActividades(actData || [])
-      setPerfiles(perfData || [])
+      setPerfiles((perfData || []).map(p => ({ ...p, activo: true })))
 
-      if (planData) {
-        setPlanForm({
-          titulo: planData.titulo || '',
-          fecha: planData.fecha || '',
-          version: planData.version || '',
-          actualizado_segun: planData.actualizado_segun || '',
-          objetivo_general: planData.objetivo_general || '',
-        })
-      }
-
-      // Init actividades edit map
-      const actMap: { [id: string]: ActividadPlanificacion } = {}
-      for (const a of (actData || [])) actMap[a.id] = { ...a }
-      setEditingActividad(actMap)
-
+      // Init actividades edit map (no operations here since we removed actividades)
     } catch (e: any) {
       console.error(e)
       notify('err', 'Error al cargar datos. Verifica las políticas RLS.')
@@ -476,15 +448,9 @@ export default function AdminMantencionPage() {
   // ─── Usuarios Handlers ────────────────────────────────────────────────────
 
   const togglePerfilActivo = async (perf: Perfil) => {
-    try {
-      const { error } = await supabaseBrowser
-        .from('perfiles').update({ activo: !perf.activo }).eq('id', perf.id)
-      if (error) throw error
-      notify('ok', `Usuario ${!perf.activo ? 'activado' : 'desactivado'}.`)
-      setPerfiles(prev => prev.map(p => p.id === perf.id ? { ...p, activo: !p.activo } : p))
-    } catch {
-      notify('err', 'Error al cambiar estado del usuario.')
-    }
+    // La columna 'activo' no existe en la tabla perfiles. 
+    // Para desactivar un usuario se requiere usar la API de Supabase Auth (Admin).
+    notify('err', 'La desactivación de usuarios debe hacerse desde el panel de Supabase Auth directamente.')
   }
 
   const changePerfilRol = async (id: string, newRol: string) => {
@@ -923,7 +889,6 @@ export default function AdminMantencionPage() {
                         <th>Email</th>
                         <th>Rol</th>
                         <th className="text-center">Estado</th>
-                        <th className="text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -949,28 +914,11 @@ export default function AdminMantencionPage() {
                             </select>
                           </td>
                           <td className="text-center">
-                            <button
-                              onClick={() => togglePerfilActivo(perf)}
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
-                                perf.activo
-                                  ? 'bg-green-500/10 border-green-500/30 text-green-500 hover:bg-green-500/20'
-                                  : 'bg-red-500/10 border-red-500/30 text-red-500 hover:bg-red-500/20'
-                              }`}
-                              title="Haz clic para alternar estado"
+                            <span
+                              className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-green-500/10 border-green-500/30 text-green-500"
                             >
-                              {perf.activo ? 'ACTIVO' : 'INACTIVO'}
-                            </button>
-                          </td>
-                          <td className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <button
-                                onClick={() => togglePerfilActivo(perf)}
-                                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
-                                title={perf.activo ? 'Desactivar usuario' : 'Activar usuario'}
-                              >
-                                {perf.activo ? <XCircle size={13} /> : <CheckCircle2 size={13} />}
-                              </button>
-                            </div>
+                              ACTIVO
+                            </span>
                           </td>
                         </tr>
                       ))}
