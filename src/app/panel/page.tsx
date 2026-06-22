@@ -871,13 +871,13 @@ export default function PanelPage() {
       }
     })
 
-    // Timeout de seguridad global de 5 segundos
+    // Timeout de seguridad global de 10 segundos
     const safetyTimeout = setTimeout(() => {
       if (active && !profileLoadedRef.current) {
-        console.warn("[PanelPage] Timeout global de 5s expiró sin perfil. Redirigiendo a /login...");
+        console.warn("[PanelPage] Timeout global de 10s expiró sin perfil. Redirigiendo a /login...");
         router.replace('/login')
       }
-    }, 5000)
+    }, 10000)
 
     return () => {
       active = false
