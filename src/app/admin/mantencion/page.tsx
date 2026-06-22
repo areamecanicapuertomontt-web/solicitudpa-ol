@@ -271,6 +271,7 @@ export default function AdminMantencionPage() {
         supabaseBrowser
           .from('perfiles')
           .select('id, nombre, email, rol, activo')
+          .neq('rol', 'ALUMNO')
           .order('nombre'),
       ])
 
@@ -359,9 +360,9 @@ export default function AdminMantencionPage() {
     const q = searchUsuario.toLowerCase()
     return perfiles.filter(p => {
       const matchSearch = !q ||
-        p.nombre.toLowerCase().includes(q) ||
-        p.email.toLowerCase().includes(q)
-      const matchRol = filtroRol === 'TODOS' || p.rol === filtroRol
+        (p.nombre || '').toLowerCase().includes(q) ||
+        (p.email || '').toLowerCase().includes(q)
+      const matchRol = filtroRol === 'TODOS' || (p.rol || '').trim().toUpperCase() === filtroRol
       return matchSearch && matchRol
     })
   }, [perfiles, searchUsuario, filtroRol])
@@ -470,56 +471,7 @@ export default function AdminMantencionPage() {
     }
   }
 
-  // ─── Plan Handlers ────────────────────────────────────────────────────────
 
-  const handleSavePlan = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!plan) return
-    setSavingPlan(true)
-    try {
-      const { error } = await supabaseBrowser
-        .from('planes_mantencion')
-        .update({
-          titulo: planForm.titulo,
-          fecha: planForm.fecha,
-          version: planForm.version,
-          actualizado_segun: planForm.actualizado_segun || null,
-          objetivo_general: planForm.objetivo_general || null,
-        })
-        .eq('id', plan.id)
-      if (error) throw error
-      notify('ok', 'Plan de mantención actualizado.')
-      fetchData(true)
-    } catch (err: any) {
-      notify('err', 'Error al guardar plan: ' + (err.message || ''))
-    } finally {
-      setSavingPlan(false)
-    }
-  }
-
-  const handleSaveActividad = async (id: string) => {
-    const act = editingActividad[id]
-    if (!act) return
-    setSavingActividad(id)
-    try {
-      const { error } = await supabaseBrowser
-        .from('actividades_planificacion')
-        .update({
-          actividad: act.actividad,
-          responsable: act.responsable || null,
-          frecuencia: act.frecuencia || null,
-          detalle_meses: act.detalle_meses || null,
-        })
-        .eq('id', id)
-      if (error) throw error
-      notify('ok', 'Actividad actualizada.')
-      fetchData(true)
-    } catch (err: any) {
-      notify('err', 'Error al guardar actividad.')
-    } finally {
-      setSavingActividad(null)
-    }
-  }
 
   // ─── Usuarios Handlers ────────────────────────────────────────────────────
 
@@ -563,7 +515,6 @@ export default function AdminMantencionPage() {
   const tabItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard',     label: 'Dashboard',      icon: <LayoutDashboard size={14} /> },
     { id: 'equipos',       label: 'Equipos',         icon: <Wrench size={14} /> },
-    { id: 'planificacion', label: 'Planificación',   icon: <Calendar size={14} /> },
     { id: 'usuarios',      label: 'Usuarios',        icon: <Users size={14} /> },
   ]
 
@@ -921,170 +872,6 @@ export default function AdminMantencionPage() {
         {/* ══════════════════════════════════════════════════════════════════════
             TAB: PLANIFICACIÓN
         ══════════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'planificacion' && (
-          <div className="space-y-6 animate-fade-in">
-
-            {/* Plan Info Form */}
-            <div className="card p-5 space-y-4">
-              <h2 className="font-extrabold text-sm uppercase tracking-wider text-red-500 border-b border-white/5 pb-2 flex items-center gap-2">
-                <ClipboardList size={16} /> Datos del Plan de Mantención
-              </h2>
-              {!plan ? (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/15">
-                  <AlertTriangle size={15} className="text-yellow-500 shrink-0" />
-                  <p className="text-xs text-yellow-400">No hay un plan activo. Crea uno en la base de datos primero.</p>
-                </div>
-              ) : (
-                <form onSubmit={handleSavePlan} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="lg:col-span-2">
-                      <label className="label">Título del Plan</label>
-                      <input
-                        type="text"
-                        className="input-field"
-                        value={planForm.titulo}
-                        onChange={e => setPlanForm(p => ({ ...p, titulo: e.target.value }))}
-                        placeholder="Plan de Mantención Preventiva..."
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Fecha</label>
-                      <input
-                        type="text"
-                        className="input-field"
-                        value={planForm.fecha}
-                        onChange={e => setPlanForm(p => ({ ...p, fecha: e.target.value }))}
-                        placeholder="Ej: Enero 2026"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Versión</label>
-                      <input
-                        type="text"
-                        className="input-field"
-                        value={planForm.version}
-                        onChange={e => setPlanForm(p => ({ ...p, version: e.target.value }))}
-                        placeholder="Ej: v1.0"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label">Actualizado según</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      value={planForm.actualizado_segun}
-                      onChange={e => setPlanForm(p => ({ ...p, actualizado_segun: e.target.value }))}
-                      placeholder="Documento de referencia o normativa..."
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Objetivo General</label>
-                    <textarea
-                      rows={3}
-                      className="input-field resize-none"
-                      value={planForm.objetivo_general}
-                      onChange={e => setPlanForm(p => ({ ...p, objetivo_general: e.target.value }))}
-                      placeholder="Describir el objetivo general del plan de mantención..."
-                    />
-                  </div>
-                  <div className="flex justify-end">
-                    <button type="submit" className="btn-success !py-2 !px-5 text-sm" disabled={savingPlan}>
-                      <Save size={14} /> {savingPlan ? 'Guardando...' : 'Guardar Plan'}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-
-            {/* Actividades de Planificación */}
-            <div className="card p-5 space-y-4">
-              <h2 className="font-extrabold text-sm uppercase tracking-wider text-red-500 border-b border-white/5 pb-2 flex items-center gap-2">
-                <Activity size={16} /> Actividades de Planificación (Sección I)
-              </h2>
-              {actividades.length === 0 ? (
-                <p className="text-sm text-gray-500 py-6 text-center">No hay actividades registradas.</p>
-              ) : (
-                <div className="space-y-4">
-                  {actividades.map((act, idx) => {
-                    const draft = editingActividad[act.id] || act
-                    const saving = savingActividad === act.id
-                    return (
-                      <div key={act.id} className="rounded-xl border border-white/5 bg-white/1 p-4 space-y-3">
-                        <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">
-                          Actividad {act.numero}
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div className="md:col-span-2">
-                            <label className="label">Descripción de la Actividad</label>
-                            <input
-                              type="text"
-                              className="input-field text-sm"
-                              value={draft.actividad}
-                              onChange={e => setEditingActividad(prev => ({
-                                ...prev,
-                                [act.id]: { ...draft, actividad: e.target.value }
-                              }))}
-                            />
-                          </div>
-                          <div>
-                            <label className="label">Responsable</label>
-                            <input
-                              type="text"
-                              className="input-field text-sm"
-                              value={draft.responsable || ''}
-                              onChange={e => setEditingActividad(prev => ({
-                                ...prev,
-                                [act.id]: { ...draft, responsable: e.target.value }
-                              }))}
-                              placeholder="Nombre del responsable..."
-                            />
-                          </div>
-                          <div>
-                            <label className="label">Frecuencia</label>
-                            <input
-                              type="text"
-                              className="input-field text-sm"
-                              value={draft.frecuencia || ''}
-                              onChange={e => setEditingActividad(prev => ({
-                                ...prev,
-                                [act.id]: { ...draft, frecuencia: e.target.value }
-                              }))}
-                              placeholder="Ej: Semestral / Anual..."
-                            />
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="label">Detalle de Meses</label>
-                            <input
-                              type="text"
-                              className="input-field text-sm"
-                              value={draft.detalle_meses || ''}
-                              onChange={e => setEditingActividad(prev => ({
-                                ...prev,
-                                [act.id]: { ...draft, detalle_meses: e.target.value }
-                              }))}
-                              placeholder="Ej: Enero, Julio..."
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end">
-                          <button
-                            onClick={() => handleSaveActividad(act.id)}
-                            className="btn-success !py-1.5 !px-4 text-xs"
-                            disabled={saving}
-                          >
-                            <Save size={13} />
-                            {saving ? 'Guardando...' : 'Guardar Actividad'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* ══════════════════════════════════════════════════════════════════════
             TAB: USUARIOS
@@ -1112,7 +899,6 @@ export default function AdminMantencionPage() {
                 <option value="TODOS">Todos los roles</option>
                 <option value="ADMIN">ADMIN</option>
                 <option value="DOCENTE">DOCENTE</option>
-                <option value="ALUMNO">ALUMNO</option>
                 <option value="PANOL">PAÑOL</option>
               </select>
             </div>
