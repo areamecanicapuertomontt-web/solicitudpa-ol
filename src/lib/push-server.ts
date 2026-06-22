@@ -54,6 +54,7 @@ export async function enviarPushNotificacion(
         body,
         url: url || '/',
       }),
+      signal: AbortSignal.timeout(4000), // Timeout estricto de 4s
     })
 
     if (!res.ok) {

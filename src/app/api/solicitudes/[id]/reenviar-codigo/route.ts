@@ -74,12 +74,12 @@ export async function POST(
     }
 
     // 6. Enviar la notificación push en background — responder de inmediato
-    enviarPushNotificacion(
+    await enviarPushNotificacion(
       alumnoUserId,
-      '🔑 Código de Entrega',
-      `Tu código para retirar materiales de "${solicitud.asignatura}" es: ${solicitud.codigo_entrega}`,
-      `/solicitud/${solicitud.id}/confirmacion`
-    ).catch(e => console.error('[reenviar-codigo] Error en push:', e))
+      'Código de Retiro 📦',
+      `El código para retirar tus materiales es: ${solicitud.codigo_entrega}`,
+      '/mis-solicitudes'
+    ).catch(e => console.error('Error al reenviar código por push:', e))
 
     return Response.json({ ok: true })
   } catch (error: any) {

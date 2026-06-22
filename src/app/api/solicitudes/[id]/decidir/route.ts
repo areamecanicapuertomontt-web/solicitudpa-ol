@@ -124,7 +124,7 @@ export async function PATCH(
 
           const panolUserIds = (perfilesPanol || []).map(p => p.id)
           if (panolUserIds.length > 0) {
-            enviarPushNotificacion(
+            await enviarPushNotificacion(
               panolUserIds,
               'Nuevo Préstamo Autorizado 📦',
               `Preparar materiales para el alumno ${solicitudSnapshot.alumno}. Código de Entrega: ${codigoEntrega}.`,
@@ -133,7 +133,7 @@ export async function PATCH(
           }
         } else if (accion === 'rechazar') {
           if (alumnoUserId) {
-            enviarPushNotificacion(
+            await enviarPushNotificacion(
               alumnoUserId,
               'Solicitud Rechazada ❌',
               `Tu solicitud para "${solicitudSnapshot.asignatura}" fue rechazada.${motivoRechazo ? ` Motivo: "${motivoRechazo}"` : ' Revisa el detalle para más información.'}`,

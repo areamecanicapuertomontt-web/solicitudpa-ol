@@ -181,7 +181,7 @@ export async function PATCH(
           }
         }
 
-        enviarPushNotificacion(
+        await enviarPushNotificacion(
           targetUserIds,
           '⚠️ Alerta: Material Faltante',
           `El alumno ${solicitudCompleta.alumno} realizó una devolución parcial. Quedan herramientas pendientes de retornar al pañol.`,
