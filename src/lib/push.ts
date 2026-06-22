@@ -57,21 +57,7 @@ export async function subscribeToPush(
     return null
   }
 
-  // Limpiar suscripciones antiguas del mismo usuario con endpoint distinto al actual.
-  // Esto previene que el usuario reciba notificaciones duplicadas si se suscribió
-  // en múltiples sesiones o dispositivos de prueba anteriores.
-  const { error: deleteErr } = await supabase
-    .from('push_subscriptions')
-    .delete()
-    .eq('user_id', userId)
-    .neq('endpoint', sub.endpoint)
-
-  if (deleteErr) {
-    // No es crítico — continuamos igual
-    console.warn('[push] No se pudieron limpiar suscripciones antiguas:', deleteErr.message)
-  } else {
-    console.log('[push] ✅ Suscripciones antiguas del usuario limpiadas')
-  }
+  // Permitimos múltiples dispositivos por usuario. Las suscripciones muertas (410 Gone) se limpian desde el backend.
 
   console.log('[push] Guardando suscripción en Supabase (tabla push_subscriptions)...')
   const { error } = await supabase.rpc('upsert_push_subscription', {

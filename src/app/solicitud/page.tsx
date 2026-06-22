@@ -508,10 +508,22 @@ export default function SolicitudPage() {
     async function loadProfile() {
       try {
         const userPromise = supabaseClient.auth.getUser()
+
+        // Auto-reinicio silencioso a los 4s para destrabar PWA en móviles
+        const autoReloadTimer = setTimeout(() => {
+          const hasReloaded = sessionStorage.getItem('reloaded_solicitud')
+          if (!hasReloaded) {
+            sessionStorage.setItem('reloaded_solicitud', 'true')
+            window.location.reload()
+          }
+        }, 4000)
+
         const timeoutPromise = new Promise<any>((_, reject) =>
           setTimeout(() => reject(new Error('Timeout')), 60000)
         )
         const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
+        clearTimeout(autoReloadTimer)
+
         if (user) {
           let perf = null
           try {

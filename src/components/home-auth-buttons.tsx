@@ -16,10 +16,19 @@ export default function HomeAuthButtons() {
       try {
         // Limit session fetch to 3 seconds to avoid infinite loading on offline local devices
         const userPromise = supabaseBrowser.auth.getUser()
+
+        const autoReloadTimer = setTimeout(() => {
+          const hasReloaded = sessionStorage.getItem('reloaded_home')
+          if (!hasReloaded) {
+            sessionStorage.setItem('reloaded_home', 'true')
+            window.location.reload()
+          }
+        }, 4000)
         const timeoutPromise = new Promise<any>((_, reject) =>
           setTimeout(() => reject(new Error('Timeout')), 60000)
         )
         const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
+        clearTimeout(autoReloadTimer)
         if (user) {
           const { data: perf } = await supabaseBrowser
             .from('perfiles')

@@ -49,17 +49,23 @@ export default function ConfirmacionPage() {
           .eq('id', id)
           .maybeSingle()
 
-        // Mostrar mensaje de servidor lento si tarda más de 5 segundos
-        const slowConnectionTimer = setTimeout(() => {
-          setIsSlowConnection(true)
-        }, 5000)
+        // Auto-reinicio silencioso (idea del alumno) a los 4 segundos para destrabar redes móviles dormidas
+        const autoReloadTimer = setTimeout(() => {
+          const hasReloaded = sessionStorage.getItem(`reloaded_conf_${id}`)
+          if (!hasReloaded) {
+            sessionStorage.setItem(`reloaded_conf_${id}`, 'true')
+            window.location.reload()
+          } else {
+            setIsSlowConnection(true)
+          }
+        }, 4000)
 
         const timeoutPromise = new Promise<any>((_, reject) =>
           setTimeout(() => reject(new Error('Timeout')), 60000)
         )
 
         const { data, error } = await Promise.race([queryPromise, timeoutPromise])
-        clearTimeout(slowConnectionTimer)
+        clearTimeout(autoReloadTimer)
 
         if (error) {
           throw error
