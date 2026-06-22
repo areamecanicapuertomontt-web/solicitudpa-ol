@@ -11,6 +11,7 @@ interface SolicitudEstado {
   codigo_entrega: string | null
   alumno: string
   asignatura: string
+  observaciones: string | null
 }
 
 export default function ConfirmacionPage({
@@ -35,7 +36,7 @@ export default function ConfirmacionPage({
     async function fetchEstado() {
       const { data, error } = await supabaseClient
         .from('solicitudes')
-        .select('estado, codigo_entrega, alumno, asignatura')
+        .select('estado, codigo_entrega, alumno, asignatura, observaciones')
         .eq('id', id)
         .maybeSingle()
 
@@ -136,8 +137,8 @@ export default function ConfirmacionPage({
               </div>
             </div>
 
-            <Link href="/solicitud" className="btn-primary w-full justify-center py-4">
-              Nueva Solicitud
+            <Link href="/" className="btn-secondary w-full justify-center py-4 mb-3">
+              Volver al inicio
             </Link>
           </>
         ) : solicitud?.estado === 'RECHAZADA' ? (
@@ -151,12 +152,18 @@ export default function ConfirmacionPage({
               <h1 className="text-2xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
                 Solicitud Rechazada
               </h1>
-              <p className="text-sm text-gray-400">
-                Tu docente rechazó esta solicitud. Revisa el motivo y consulta directamente.
+              <p className="text-sm text-gray-400 mb-4">
+                Tu docente rechazó esta solicitud.
               </p>
+              {solicitud.observaciones && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-4 text-left">
+                  <p className="text-xs text-red-400 font-bold uppercase tracking-wider mb-1">Motivo del rechazo:</p>
+                  <p className="text-sm text-gray-300 italic">"{solicitud.observaciones}"</p>
+                </div>
+              )}
             </div>
-            <Link href="/solicitud" className="btn-primary w-full justify-center py-4">
-              Nueva Solicitud
+            <Link href="/" className="btn-secondary w-full justify-center py-4 mb-3">
+              Volver al inicio
             </Link>
           </>
         ) : (
@@ -237,14 +244,9 @@ export default function ConfirmacionPage({
               </p>
             </div>
 
-            <Link href="/solicitud" className="btn-primary w-full justify-center py-4">
-              Nueva Solicitud
+            <Link href="/" className="btn-secondary w-full justify-center py-4 mb-3">
+              Volver al inicio
             </Link>
-            <div className="mt-3 text-center">
-              <Link href="/" className="text-sm hover:underline" style={{ color: 'var(--text-muted)' }}>
-                Volver al inicio
-              </Link>
-            </div>
           </>
         )}
       </div>

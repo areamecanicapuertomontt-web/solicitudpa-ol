@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabase-browser'
-import { ClipboardList, Settings, LogIn, LogOut, LayoutDashboard, User } from 'lucide-react'
+import { ClipboardList, Settings, LogIn, LogOut, LayoutDashboard, User, Package, Plus } from 'lucide-react'
 import Link from 'next/link'
 
 export default function HomeAuthButtons() {
@@ -94,10 +94,16 @@ export default function HomeAuthButtons() {
 
       <div className="flex flex-wrap gap-3">
         {profile.rol === 'ALUMNO' ? (
-          <Link href="/solicitud" className="btn-primary text-base w-full sm:w-auto">
-            <ClipboardList size={18} />
-            Nueva Solicitud
-          </Link>
+          <>
+            <Link href="/solicitud?tab=form" className="btn-primary text-base w-full sm:w-auto flex-1">
+              <Plus size={18} />
+              Nueva Solicitud
+            </Link>
+            <Link href="/solicitud?tab=mis-solicitudes" className="btn-secondary text-base w-full sm:w-auto flex-1">
+              <Package size={18} />
+              Mis Solicitudes
+            </Link>
+          </>
         ) : (
           <>
             <Link href="/panel" className="btn-success text-base w-full sm:w-auto">

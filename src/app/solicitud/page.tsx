@@ -36,7 +36,8 @@ import {
   Clock,
   Truck,
   RotateCcw,
-  ChevronRight
+  ChevronRight,
+  Info
 } from 'lucide-react'
 import { BadgeEstado } from '@/components/BadgeEstado'
 import type { Docente } from '@/lib/types'
@@ -964,7 +965,7 @@ export default function SolicitudPage() {
 
                         return (
                           <div
-                            className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden shadow-2xl border text-left"
+                            className="absolute z-50 w-[calc(100%+4.5rem)] -left-[4.5rem] mt-1 rounded-xl overflow-hidden shadow-2xl border text-left"
                             style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
                           >
                             {/* Sección Equipos de Mantención */}
@@ -998,11 +999,16 @@ export default function SolicitudPage() {
                                         </p>
                                       )}
                                     </div>
-                                    {e.codigo_inventario && (
-                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                        Inv: {e.codigo_inventario}
-                                      </span>
-                                    )}
+                                    <div className="flex items-center gap-2 flex-shrink-0 ml-1">
+                                      {e.codigo_inventario && (
+                                        <span className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                          Inv: {e.codigo_inventario}
+                                        </span>
+                                      )}
+                                      <div title={`Detalles de: ${e.nombre} ${e.codigo_inventario ? `(Inv: ${e.codigo_inventario})` : ''}`}>
+                                        <Info size={16} className="text-gray-400 hover:text-white transition-colors" />
+                                      </div>
+                                    </div>
                                   </button>
                                 ))}
                               </div>
