@@ -911,8 +911,12 @@ export default function SolicitudPage() {
 
             <div className="space-y-3">
               {fields.map((field, idx) => (
-                <div key={field.id} className="rounded-xl p-3 animate-slide-in"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+                <div key={field.id} className="rounded-xl p-3 animate-slide-in relative"
+                  style={{ 
+                    background: 'rgba(255,255,255,0.03)', 
+                    border: '1px solid var(--border)',
+                    zIndex: activeAutocomplete === idx ? 50 : 1
+                  }}>
                   <div className="flex items-start gap-2">
                     {/* Cantidad */}
                     <div className="w-16 flex-shrink-0">
