@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
 
-const CACHE_NAME = "inacap-panol-v1.3.0";
+const CACHE_NAME = "inacap-panol-v1.3.1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -42,7 +42,7 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(() => caches.match(event.request).then(cached => cached || new Response('Offline', { status: 503 })))
     );
     return;
   }
@@ -56,9 +56,9 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return networkResponse;
-      }).catch(() => {});
+      }).catch(() => new Response('Offline', { status: 503 }));
 
-      return cachedResponse || fetchPromise;
+      return cachedResponse || fetchPromise.then(res => res || new Response('Offline', { status: 503 }));
     })
   );
 });
