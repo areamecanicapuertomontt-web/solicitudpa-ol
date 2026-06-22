@@ -833,7 +833,7 @@ export default function PanelPage() {
                 .single()
               
               const timeoutPromise = new Promise<any>((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout de reintento')), 10000)
+                setTimeout(() => reject(new Error('Timeout de reintento')), 60000)
               )
               
               const retryRes = await Promise.race([queryPromise, timeoutPromise])
@@ -880,18 +880,30 @@ export default function PanelPage() {
       }
     })
 
-    // Timeout de seguridad global de 10 segundos
+    // Auto-reinicio silencioso a los 4s para destrabar redes en segundo plano
+    const autoReloadTimer = setTimeout(() => {
+      if (active && !profileLoadedRef.current) {
+        const hasReloaded = sessionStorage.getItem('reloaded_panel')
+        if (!hasReloaded) {
+          sessionStorage.setItem('reloaded_panel', 'true')
+          window.location.reload()
+        }
+      }
+    }, 4000)
+
+    // Timeout de seguridad global de 60 segundos (para no chocar con el Cold Start)
     const safetyTimeout = setTimeout(() => {
       if (active && !profileLoadedRef.current) {
-        console.warn("[PanelPage] Timeout global de 10s expiró sin perfil. Redirigiendo a /login...");
+        console.warn("[PanelPage] Timeout global de 60s expiró sin perfil. Redirigiendo a /login...");
         router.replace('/login')
       }
-    }, 10000)
+    }, 60000)
 
     return () => {
       active = false
       subscription.unsubscribe()
       clearTimeout(safetyTimeout)
+      clearTimeout(autoReloadTimer)
     }
   }, [router])
 
