@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
 
-const CACHE_NAME = "inacap-panol-v1.4.0";
+const CACHE_NAME = "pañol-cache-v7";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -89,11 +89,21 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // 1. Primero intentar enfocar si la URL exacta ya está abierta
       for (const client of clientList) {
         if (client.url.includes(url) && "focus" in client) {
           return client.focus();
         }
       }
+      // 2. Si no, pero hay alguna ventana de la app abierta, la enfocamos y navegamos a la URL
+      for (const client of clientList) {
+        if ("focus" in client && "navigate" in client) {
+          return client.focus().then((focusedClient) => {
+            if (focusedClient) return focusedClient.navigate(url);
+          });
+        }
+      }
+      // 3. Como último recurso, abrimos una nueva ventana
       if (self.clients.openWindow) {
         return self.clients.openWindow(url);
       }
