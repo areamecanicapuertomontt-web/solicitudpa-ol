@@ -3,6 +3,7 @@ import './globals.css'
 import PushHandler from '@/components/PushHandler'
 import PWAInstallPrompt from '@/components/PWAInstallPrompt'
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next"
 
 export const metadata: Metadata = {
   title: 'Pañol Mecánico — INACAP Área Mecánica',
@@ -23,6 +24,7 @@ export default function RootLayout({
         <PWAInstallPrompt />
         {children}
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   )
