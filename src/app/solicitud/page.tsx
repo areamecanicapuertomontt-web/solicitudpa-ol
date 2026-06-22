@@ -331,10 +331,20 @@ export default function SolicitudPage() {
   const { fields, append, remove } = useFieldArray({ control, name: 'items' })
 
   useEffect(() => {
-    fetch('/api/docentes')
-      .then(r => r.json())
-      .then(data => setDocentes(data.docentes || []))
-      .catch(() => setDocentes([]))
+    const fetchDocentes = async (retry = true) => {
+      try {
+        const r = await fetch('/api/docentes')
+        const data = await r.json()
+        setDocentes(data.docentes || [])
+      } catch (e) {
+        if (retry) {
+          setTimeout(() => fetchDocentes(false), 3000)
+        } else {
+          setDocentes([])
+        }
+      }
+    }
+    fetchDocentes()
   }, [])
 
 
@@ -352,8 +362,8 @@ export default function SolicitudPage() {
 
   // Cargar catálogo de equipos del Plan de Mantención para autocompletar
   useEffect(() => {
-    async function loadEquipos() {
-      const { data } = await supabaseClient
+    async function loadEquipos(retry = true) {
+      const { data, error } = await supabaseClient
         .from('equipos')
         .select('id, nombre, codigo_inventario, frecuencia, secciones_mantencion(nombre)')
         .eq('activo', true)
@@ -366,6 +376,9 @@ export default function SolicitudPage() {
           frecuencia: e.frecuencia,
           seccion_nombre: e.secciones_mantencion?.nombre || null
         })))
+      } else if (error && retry) {
+        console.warn("loadEquipos falló en frío, reintentando en 3s...", error)
+        setTimeout(() => loadEquipos(false), 3000)
       }
     }
     loadEquipos()
@@ -417,7 +430,7 @@ export default function SolicitudPage() {
   }, [equiposCatalog, catalogSearch, filtroArea, filtroFrecuencia])
 
   useEffect(() => {
-    async function loadAsignaturas() {
+    async function loadAsignaturas(retry = true) {
       const { data, error } = await supabaseClient
         .from('asignaturas')
         .select('*')
@@ -425,6 +438,11 @@ export default function SolicitudPage() {
         .order('nombre', { ascending: true })
       
       if (error) {
+        if (retry) {
+          console.warn('[loadAsignaturas] Error en frío, reintentando en 3s...', error)
+          setTimeout(() => loadAsignaturas(false), 3000)
+          return
+        }
         console.error('[loadAsignaturas] Error al consultar tabla "asignaturas" en Supabase:', {
           message: error.message,
           code: error.code,
