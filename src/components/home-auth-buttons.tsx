@@ -17,7 +17,7 @@ export default function HomeAuthButtons() {
         // Limit session fetch to 3 seconds to avoid infinite loading on offline local devices
         const userPromise = supabaseBrowser.auth.getUser()
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 30000)
+          setTimeout(() => reject(new Error('Timeout')), 60000)
         )
         const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
         if (user) {

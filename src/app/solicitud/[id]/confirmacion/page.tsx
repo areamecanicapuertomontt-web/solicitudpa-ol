@@ -30,6 +30,7 @@ export default function ConfirmacionPage() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
+  const [isSlowConnection, setIsSlowConnection] = useState(false)
 
   // Cargar estado de la solicitud y polling cada 10s
   useEffect(() => {
@@ -48,11 +49,17 @@ export default function ConfirmacionPage() {
           .eq('id', id)
           .maybeSingle()
 
+        // Mostrar mensaje de servidor lento si tarda más de 5 segundos
+        const slowConnectionTimer = setTimeout(() => {
+          setIsSlowConnection(true)
+        }, 5000)
+
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de consulta')), 15000)
+          setTimeout(() => reject(new Error('Timeout')), 60000)
         )
 
         const { data, error } = await Promise.race([queryPromise, timeoutPromise])
+        clearTimeout(slowConnectionTimer)
 
         if (error) {
           throw error
@@ -101,9 +108,13 @@ export default function ConfirmacionPage() {
         </div>
 
         {loading ? (
-          <div className="card p-10 flex flex-col items-center gap-4">
+          <div className="card p-10 flex flex-col items-center gap-4 text-center">
             <span className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            <p className="text-sm text-gray-400">Cargando estado de tu solicitud...</p>
+            <p className="text-sm text-gray-400">
+              {isSlowConnection 
+                ? 'El servidor está despertando, esto puede tomar hasta un minuto...'
+                : 'Cargando estado de tu solicitud...'}
+            </p>
           </div>
         ) : fetchError && !solicitud ? (
           <div className="card p-10 flex flex-col items-center gap-4 text-center">
