@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
 
-const CACHE_NAME = "pañol-cache-v7";
+const CACHE_NAME = "pañol-cache-v8";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -26,8 +26,14 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(event.request.url);
 
-  // Excluir rutas de API y supabase del caché
-  if (url.pathname.startsWith('/api/') || url.origin.includes('supabase.co')) {
+  // Excluir rutas de API, supabase, y cualquier navegación de Next.js (HTML/RSC) del caché
+  if (
+    url.pathname.startsWith('/api/') || 
+    url.origin.includes('supabase.co') ||
+    event.request.mode === 'navigate' ||
+    event.request.headers.get('accept')?.includes('text/html') ||
+    event.request.headers.get('rsc') === '1'
+  ) {
     return; // Usa el comportamiento nativo de red
   }
 
