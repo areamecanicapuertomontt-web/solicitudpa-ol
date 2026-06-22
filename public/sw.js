@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
 
-const CACHE_NAME = "inacap-panol-v1.3.1";
+const CACHE_NAME = "inacap-panol-v1.4.0";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
