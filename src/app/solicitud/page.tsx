@@ -319,6 +319,7 @@ export default function SolicitudPage() {
   const [addedEquipos, setAddedEquipos] = useState<Record<string, boolean>>({})
   const [activePanoleros, setActivePanoleros] = useState<any[]>([])
   const [loadingPanoleros, setLoadingPanoleros] = useState(true)
+  const [selectedEquipoDetail, setSelectedEquipoDetail] = useState<any>(null)
 
   const { register, control, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -366,7 +367,7 @@ export default function SolicitudPage() {
     async function loadEquipos(retry = true) {
       const { data, error } = await supabaseClient
         .from('equipos')
-        .select('id, nombre, codigo_inventario, frecuencia, secciones_mantencion(nombre)')
+        .select('id, nombre, codigo_inventario, frecuencia, secciones_mantencion(nombre), observaciones, nivel_uso, cantidad')
         .eq('activo', true)
         .order('nombre')
       if (data) {
@@ -375,7 +376,10 @@ export default function SolicitudPage() {
           nombre: e.nombre,
           codigo_inventario: e.codigo_inventario,
           frecuencia: e.frecuencia,
-          seccion_nombre: e.secciones_mantencion?.nombre || null
+          seccion_nombre: e.secciones_mantencion?.nombre || null,
+          observaciones: e.observaciones,
+          nivel_uso: e.nivel_uso,
+          cantidad: e.cantidad
         })))
       } else if (error && retry) {
         console.warn("loadEquipos falló en frío, reintentando en 3s...", error)
@@ -1005,9 +1009,18 @@ export default function SolicitudPage() {
                                           Inv: {e.codigo_inventario}
                                         </span>
                                       )}
-                                      <div title={`Detalles de: ${e.nombre} ${e.codigo_inventario ? `(Inv: ${e.codigo_inventario})` : ''}`}>
-                                        <Info size={16} className="text-gray-400 hover:text-white transition-colors" />
-                                      </div>
+                                      <button
+                                        type="button"
+                                        className="p-1.5 hover:bg-white/10 rounded-full transition-colors z-50 text-blue-400"
+                                        onClick={(ev) => {
+                                          ev.stopPropagation()
+                                          ev.preventDefault()
+                                          setSelectedEquipoDetail(e)
+                                        }}
+                                        title="Ver detalles"
+                                      >
+                                        <Info size={18} />
+                                      </button>
                                     </div>
                                   </button>
                                 ))}
@@ -1201,6 +1214,66 @@ export default function SolicitudPage() {
         </>
         )}
       </div>
+
+      {/* Modal Detalle Equipo */}
+      {selectedEquipoDetail && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="card w-full max-w-md overflow-hidden relative">
+            {/* Header decorativo */}
+            <div className="h-2 bg-blue-500 w-full" />
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-black leading-tight pr-8">{selectedEquipoDetail.nombre}</h3>
+                <button
+                  type="button"
+                  onClick={() => setSelectedEquipoDetail(null)}
+                  className="absolute top-4 right-4 p-2 text-gray-500 hover:text-white bg-white/5 rounded-full"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {selectedEquipoDetail.seccion_nombre && (
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Área / Sección</p>
+                    <p className="text-sm text-gray-300 font-semibold">{selectedEquipoDetail.seccion_nombre}</p>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Código Inventario</p>
+                    <p className="text-sm text-blue-400 font-mono">{selectedEquipoDetail.codigo_inventario || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Stock Pañol</p>
+                    <p className="text-sm font-semibold">{selectedEquipoDetail.cantidad || '1'} unidad(es)</p>
+                  </div>
+                </div>
+
+                {selectedEquipoDetail.observaciones && (
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">Detalles / Observaciones</p>
+                    <p className="text-xs text-gray-300 italic">"{selectedEquipoDetail.observaciones}"</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6">
+                <button
+                  type="button"
+                  className="btn-primary w-full"
+                  onClick={() => setSelectedEquipoDetail(null)}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   )
 }
