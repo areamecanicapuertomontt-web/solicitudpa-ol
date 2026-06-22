@@ -62,33 +62,39 @@ export default function NotificationBell() {
     }
   }, [userId])
 
-  // 3. Suscribirse a cambios en tiempo real
+  // 3. Suscribirse a cambios en tiempo real (diferido)
   useEffect(() => {
     if (!userId) return
 
-    const channel = supabaseBrowser
-      .channel(`user-notifications-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'historial_notificaciones',
-          filter: `user_id=eq.${userId}`
-        },
-        () => {
-          // Recargar silenciosamente
-          fetchNotifications(true)
-          // Opcionalmente reproducir vibración corta en móvil
-          try {
-            if ('vibrate' in navigator) navigator.vibrate(100)
-          } catch {}
-        }
-      )
-      .subscribe()
+    let channel: any;
+    const t = setTimeout(() => {
+      channel = supabaseBrowser
+        .channel(`user-notifications-${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'historial_notificaciones',
+            filter: `user_id=eq.${userId}`
+          },
+          () => {
+            // Recargar silenciosamente
+            fetchNotifications(true)
+            // Opcionalmente reproducir vibración corta en móvil
+            try {
+              if ('vibrate' in navigator) navigator.vibrate(100)
+            } catch {}
+          }
+        )
+        .subscribe((status, err) => {
+          if (err) console.error("Notificaciones Realtime error:", err)
+        }, 5000)
+    }, 2000) // Diferido 2s extra para dejar respirar a las solicitudes principales
 
     return () => {
-      supabaseBrowser.removeChannel(channel)
+      clearTimeout(t)
+      if (channel) supabaseBrowser.removeChannel(channel)
     }
   }, [userId])
 

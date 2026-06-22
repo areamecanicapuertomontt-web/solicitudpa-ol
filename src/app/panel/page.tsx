@@ -418,13 +418,22 @@ function DocenteView({
 
   useEffect(() => { fetchSolicitudes() }, [fetchSolicitudes])
 
-  // Realtime
+  // Realtime diferido para no bloquear carga
   useEffect(() => {
-    const channel = supabaseBrowser
-      .channel('docente-solicitudes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, () => fetchSolicitudes(true))
-      .subscribe(status => setIsLive(status === 'SUBSCRIBED'))
-    return () => { supabaseBrowser.removeChannel(channel) }
+    let channel: any;
+    const t = setTimeout(() => {
+      channel = supabaseBrowser
+        .channel('docente-solicitudes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, () => fetchSolicitudes(true))
+        .subscribe((status, err) => {
+          if (err) console.error("Realtime error:", err)
+          setIsLive(status === 'SUBSCRIBED')
+        }, 5000)
+    }, 1500)
+    return () => {
+      clearTimeout(t)
+      if (channel) supabaseBrowser.removeChannel(channel)
+    }
   }, [fetchSolicitudes])
 
   const pendientes = solicitudes.filter(s => s.estado === 'PENDIENTE')
@@ -956,20 +965,27 @@ export default function PanelPage() {
 
   useEffect(() => { fetchSolicitudes() }, [fetchSolicitudes])
 
-  // ── Supabase Realtime (WebSocket instantáneo) ─────────────────────────────
+  // ── Supabase Realtime (WebSocket instantáneo) diferido ──────────────
   useEffect(() => {
-    const channel = supabaseBrowser
-      .channel('panel-solicitudes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'solicitudes' },
-        () => { fetchSolicitudes(true) }
-      )
-      .subscribe(status => {
-        setIsLive(status === 'SUBSCRIBED')
-      })
+    let channel: any;
+    const t = setTimeout(() => {
+      channel = supabaseBrowser
+        .channel('panel-solicitudes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'solicitudes' },
+          () => { fetchSolicitudes(true) }
+        )
+        .subscribe((status, err) => {
+          if (err) console.error("Realtime error:", err)
+          setIsLive(status === 'SUBSCRIBED')
+        }, 5000)
+    }, 1500)
 
-    return () => { supabaseBrowser.removeChannel(channel) }
+    return () => {
+      clearTimeout(t)
+      if (channel) supabaseBrowser.removeChannel(channel)
+    }
   }, [fetchSolicitudes])
 
   // ── Polling cada 4 segundos silencioso (sin parpadeo) ────────────────────
