@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, Clock, Bell, XCircle, QrCode, KeyRound } from 'lucide-react'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { supabaseClient } from '@/lib/supabase-client'
 import QRCode from 'qrcode'
 
@@ -14,21 +15,21 @@ interface SolicitudEstado {
   observaciones: string | null
 }
 
-export default function ConfirmacionPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default function ConfirmacionPage() {
+  const params = useParams()
+  const idStr = params?.id as string | undefined
   const [id, setId] = useState<string>('')
+  
+  useEffect(() => {
+    if (idStr) {
+      setId(idStr)
+    }
+  }, [idStr])
+
   const [solicitud, setSolicitud] = useState<SolicitudEstado | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
-
-  // Resolver params async
-  useEffect(() => {
-    params.then(p => setId(p.id))
-  }, [params])
 
   // Cargar estado de la solicitud y polling cada 10s
   useEffect(() => {
