@@ -33,25 +33,35 @@ export default function ConfirmacionPage({
   useEffect(() => {
     if (!id) return
 
-    async function fetchEstado() {
-      const { data, error } = await supabaseClient
-        .from('solicitudes')
-        .select('estado, codigo_entrega, alumno, asignatura, observaciones')
-        .eq('id', id)
-        .maybeSingle()
+    let isFetching = false
 
-      if (data && !error) {
-        setSolicitud(data)
-        if (data.estado === 'APROBADA' && data.codigo_entrega) {
-          QRCode.toDataURL(data.codigo_entrega, {
-            width: 280,
-            margin: 2,
-            color: { dark: '#FFFFFF', light: '#0D1B2E' },
-            errorCorrectionLevel: 'H',
-          }).then(setQrDataUrl).catch(() => {})
+    async function fetchEstado() {
+      if (isFetching) return
+      isFetching = true
+      try {
+        const { data, error } = await supabaseClient
+          .from('solicitudes')
+          .select('estado, codigo_entrega, alumno, asignatura, observaciones')
+          .eq('id', id)
+          .maybeSingle()
+
+        if (data && !error) {
+          setSolicitud(data)
+          if (data.estado === 'APROBADA' && data.codigo_entrega) {
+            QRCode.toDataURL(data.codigo_entrega, {
+              width: 280,
+              margin: 2,
+              color: { dark: '#FFFFFF', light: '#0D1B2E' },
+              errorCorrectionLevel: 'H',
+            }).then(setQrDataUrl).catch(() => {})
+          }
         }
+      } catch (err) {
+        console.error('Error fetching estado:', err)
+      } finally {
+        setLoading(false)
+        isFetching = false
       }
-      setLoading(false)
     }
 
     fetchEstado()
