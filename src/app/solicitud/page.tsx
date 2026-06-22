@@ -321,7 +321,7 @@ export default function SolicitudPage() {
   const [loadingPanoleros, setLoadingPanoleros] = useState(true)
   const [selectedEquipoDetail, setSelectedEquipoDetail] = useState<any>(null)
 
-  const { register, control, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, control, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       jornada: 'D',
@@ -936,22 +936,59 @@ export default function SolicitudPage() {
                         </div>
                       </div>
                       <div className="relative">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                          style={{ color: 'var(--text-muted)' }} />
-                        <input
-                          {...register(`items.${idx}.descripcion`)}
-                          className="input-field !pl-8"
-                          placeholder="Ej: Llave inglesa 12 pulgadas"
-                          autoComplete="off"
-                          onChange={e => {
-                            register(`items.${idx}.descripcion`).onChange(e)
-                            setAutocompleteSearch(prev => ({ ...prev, [idx]: e.target.value }))
-                            setActiveAutocomplete(idx)
-                          }}
-                          onFocus={() => {
-                            setActiveAutocomplete(idx)
-                          }}
-                        />
+                        {(() => {
+                          const currentDesc = watch(`items.${idx}.descripcion`) || ''
+                          const catalogMatch = equiposCatalog.find(e => e.nombre === currentDesc)
+                          
+                          if (catalogMatch) {
+                            return (
+                              <div className="flex items-center justify-between w-full p-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 transition-all">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                    <CheckCircle size={14} className="text-blue-400" />
+                                  </div>
+                                  <p className="text-sm font-bold text-white truncate" title={catalogMatch.nombre}>
+                                    {catalogMatch.nombre}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setValue(`items.${idx}.descripcion`, '')
+                                    setAutocompleteSearch(prev => ({ ...prev, [idx]: '' }))
+                                    setActiveAutocomplete(idx)
+                                  }}
+                                  className="p-1.5 hover:bg-white/10 rounded-lg text-gray-400 hover:text-red-400 transition-colors ml-2 flex-shrink-0"
+                                  title="Quitar equipo y buscar otro"
+                                >
+                                  <XCircle size={16} />
+                                </button>
+                                <input type="hidden" {...register(`items.${idx}.descripcion`)} />
+                              </div>
+                            )
+                          }
+
+                          return (
+                            <>
+                              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                                style={{ color: 'var(--text-muted)' }} />
+                              <input
+                                {...register(`items.${idx}.descripcion`)}
+                                className="input-field !pl-8"
+                                placeholder="Ej: Llave inglesa 12 pulgadas"
+                                autoComplete="off"
+                                onChange={e => {
+                                  register(`items.${idx}.descripcion`).onChange(e)
+                                  setAutocompleteSearch(prev => ({ ...prev, [idx]: e.target.value }))
+                                  setActiveAutocomplete(idx)
+                                }}
+                                onFocus={() => {
+                                  setActiveAutocomplete(idx)
+                                }}
+                              />
+                            </>
+                          )
+                        })()}
                       </div>
                       {/* Dropdown de sugerencias */}
                       {activeAutocomplete === idx && (() => {
@@ -982,10 +1019,9 @@ export default function SolicitudPage() {
                                   </p>
                                 </div>
                                 {equiposMatches.map(e => (
-                                  <button
+                                  <div
                                     key={`eq-${e.id}`}
-                                    type="button"
-                                    className="w-full text-left px-4 py-2 hover:bg-white/5 transition-colors flex items-center justify-between gap-3 border-b border-white/[0.02]"
+                                    className="w-full text-left px-4 py-2 hover:bg-white/5 transition-colors flex items-center justify-between gap-3 border-b border-white/[0.02] cursor-pointer"
                                     onMouseDown={ev => {
                                       ev.preventDefault()
                                       setValue(`items.${idx}.descripcion`, e.nombre)
@@ -993,7 +1029,7 @@ export default function SolicitudPage() {
                                       setActiveAutocomplete(null)
                                     }}
                                   >
-                                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0 pointer-events-none">
                                       <p className="text-sm font-semibold line-clamp-2 whitespace-normal break-words text-white">
                                         {e.nombre}
                                       </p>
@@ -1005,13 +1041,14 @@ export default function SolicitudPage() {
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0 ml-1">
                                       {e.codigo_inventario && (
-                                        <span className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                        <span className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 pointer-events-none">
                                           Inv: {e.codigo_inventario}
                                         </span>
                                       )}
                                       <button
                                         type="button"
                                         className="p-1.5 hover:bg-white/10 rounded-full transition-colors z-50 text-blue-400"
+                                        onMouseDown={(ev) => ev.stopPropagation()}
                                         onClick={(ev) => {
                                           ev.stopPropagation()
                                           ev.preventDefault()
@@ -1022,7 +1059,7 @@ export default function SolicitudPage() {
                                         <Info size={18} />
                                       </button>
                                     </div>
-                                  </button>
+                                  </div>
                                 ))}
                               </div>
                             )}
