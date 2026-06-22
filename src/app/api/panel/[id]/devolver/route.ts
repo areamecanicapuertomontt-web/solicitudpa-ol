@@ -63,6 +63,34 @@ export async function PATCH(
     const devolucionCompleta = itemsPendientes.length === 0
     let nuevoEstado = 'DEVUELTA'
 
+    // 3. Obtener los datos de la solicitud original
+    const { data: solOriginal, error: solErr } = await supabase
+      .from('solicitudes')
+      .select('*, docente:docentes(*)')
+      .eq('id', id)
+      .single()
+
+    if (solErr || !solOriginal) {
+      console.error('Error cargando la solicitud original:', solErr)
+      return Response.json({ error: 'No se pudo cargar la solicitud de préstamo original' }, { status: 500 })
+    }
+
+    // 4. Buscar ID del alumno
+    let alumnoUserId: string | null = null
+    const orQuery = []
+    if (solOriginal.rut) orQuery.push(`rut.eq.${solOriginal.rut}`)
+    if (solOriginal.alumno_email) orQuery.push(`email.eq.${solOriginal.alumno_email}`)
+
+    if (orQuery.length > 0) {
+      const { data: alumnoProfile } = await supabase
+        .from('perfiles')
+        .select('id')
+        .or(orQuery.join(','))
+        .limit(1)
+        .maybeSingle()
+      if (alumnoProfile) alumnoUserId = alumnoProfile.id
+    }
+
     if (devolucionCompleta) {
       // Caso A: Devolución total. Marcamos todos los items como devueltos y la solicitud original a DEVUELTA
       const { error: itemsUpdateErr } = await supabase
@@ -84,24 +112,24 @@ export async function PATCH(
         console.error('Error al actualizar estado a DEVUELTA:', solUpdateErr)
         return Response.json({ error: 'Error al actualizar la solicitud' }, { status: 500 })
       }
+
+      // Enviar notificaciones de devolución completa
+      const targetUserIdsCompleta = [solOriginal.docente_id]
+      if (alumnoUserId) targetUserIdsCompleta.push(alumnoUserId)
+
+      await enviarPushNotificacion(
+        targetUserIdsCompleta,
+        'Material Devuelto 📦',
+        `El alumno ${solOriginal.alumno} ha devuelto todo el material correctamente al pañol.`,
+        '/panel'
+      ).catch(e => console.error('Error push devolución completa:', e))
+
     } else {
       // Caso B: Devolución parcial. Se divide la solicitud.
       nuevoEstado = 'DEVUELTA_INCOMPLETA'
 
       if (itemsDevueltos.length > 0) {
-        // 1. Obtener los datos de la solicitud original
-        const { data: solOriginal, error: solErr } = await supabase
-          .from('solicitudes')
-          .select('*')
-          .eq('id', id)
-          .single()
-
-        if (solErr || !solOriginal) {
-          console.error('Error cargando la solicitud original:', solErr)
-          return Response.json({ error: 'No se pudo cargar la solicitud de préstamo original' }, { status: 500 })
-        }
-
-        // 2. Crear una nueva solicitud clonada con estado 'DEVUELTA' (directo a Historial / Listo)
+        // Crear una nueva solicitud clonada con estado 'DEVUELTA' (directo a Historial / Listo)
         const { data: newSol, error: newSolErr } = await supabase
           .from('solicitudes')
           .insert([{
@@ -154,40 +182,33 @@ export async function PATCH(
         return Response.json({ error: 'Error al actualizar el estado del préstamo' }, { status: 500 })
       }
 
-      // 5. Enviar alertas push con los ítems pendientes al docente y al director
-      const { data: solicitudCompleta } = await supabase
-        .from('solicitudes')
-        .select('*, docente:docentes(*)')
-        .eq('id', id)
-        .single()
-
-      if (solicitudCompleta) {
-        const targetUserIds = [solicitudCompleta.docente_id]
-        
-        // Buscar el perfil del director por su email
-        const directorEmail = process.env.DIRECTOR_CARRERA_EMAIL
-        if (directorEmail) {
-          try {
-            const { data: directorProfile } = await supabase
-              .from('perfiles')
-              .select('id')
-              .eq('email', directorEmail)
-              .maybeSingle()
-            if (directorProfile) {
-              targetUserIds.push(directorProfile.id)
-            }
-          } catch (err) {
-            console.error('Error buscando perfil del director para push:', err)
+      // 5. Enviar alertas push con los ítems pendientes al docente, alumno y director
+      const targetUserIds = [solOriginal.docente_id]
+      if (alumnoUserId) targetUserIds.push(alumnoUserId)
+      
+      // Buscar el perfil del director por su email
+      const directorEmail = process.env.DIRECTOR_CARRERA_EMAIL
+      if (directorEmail) {
+        try {
+          const { data: directorProfile } = await supabase
+            .from('perfiles')
+            .select('id')
+            .eq('email', directorEmail)
+            .maybeSingle()
+          if (directorProfile) {
+            targetUserIds.push(directorProfile.id)
           }
+        } catch (err) {
+          console.error('Error buscando perfil del director para push:', err)
         }
-
-        await enviarPushNotificacion(
-          targetUserIds,
-          '⚠️ Alerta: Material Faltante',
-          `El alumno ${solicitudCompleta.alumno} realizó una devolución parcial. Quedan herramientas pendientes de retornar al pañol.`,
-          '/panel'
-        ).catch(e => console.error('Error al enviar alerta de material faltante:', e))
       }
+
+      await enviarPushNotificacion(
+        targetUserIds,
+        '⚠️ Alerta: Material Faltante',
+        `El alumno ${solOriginal.alumno} realizó una devolución parcial. Quedan herramientas pendientes de retornar al pañol.`,
+        '/panel'
+      ).catch(e => console.error('Error al enviar alerta de material faltante:', e))
     }
 
     return Response.json({ ok: true, estado: nuevoEstado, devolucionCompleta })

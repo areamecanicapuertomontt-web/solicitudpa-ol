@@ -1063,7 +1063,7 @@ export default function SolicitudPage() {
                                       )}
                                       <button
                                         type="button"
-                                        className="p-1.5 hover:bg-white/10 rounded-full transition-colors z-50 text-blue-400"
+                                        className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-md transition-colors z-50 text-blue-400"
                                         onMouseDown={(ev) => ev.stopPropagation()}
                                         onClick={(ev) => {
                                           ev.stopPropagation()
@@ -1072,7 +1072,7 @@ export default function SolicitudPage() {
                                         }}
                                         title="Ver detalles"
                                       >
-                                        <Info size={18} />
+                                        Detalle
                                       </button>
                                     </div>
                                   </div>

@@ -41,8 +41,8 @@ function LoginForm() {
       const user = data.user
       const rol = user?.user_metadata?.rol || 'ALUMNO'
 
-      // Redirección basada en rol o parámetro next
-      const nextUrl = next || (rol === 'ALUMNO' ? '/solicitud' : '/panel')
+      // Redirección al menú principal según solicitud del profesor
+      const nextUrl = next || '/'
       router.push(nextUrl)
       
       // Forzar recarga leve para actualizar el estado del middleware y cookies
