@@ -23,6 +23,7 @@ export default function ConfirmacionPage({
   const [solicitud, setSolicitud] = useState<SolicitudEstado | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
 
   // Resolver params async
   useEffect(() => {
@@ -38,14 +39,25 @@ export default function ConfirmacionPage({
     async function fetchEstado() {
       if (isFetching) return
       isFetching = true
+      setFetchError(false)
       try {
-        const { data, error } = await supabaseClient
+        const queryPromise = supabaseClient
           .from('solicitudes')
           .select('estado, codigo_entrega, alumno, asignatura, observaciones')
           .eq('id', id)
           .maybeSingle()
 
-        if (data && !error) {
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de consulta')), 15000)
+        )
+
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise])
+
+        if (error) {
+          throw error
+        }
+
+        if (data) {
           setSolicitud(data)
           if (data.estado === 'APROBADA' && data.codigo_entrega) {
             QRCode.toDataURL(data.codigo_entrega, {
@@ -58,6 +70,7 @@ export default function ConfirmacionPage({
         }
       } catch (err) {
         console.error('Error fetching estado:', err)
+        setFetchError(true)
       } finally {
         setLoading(false)
         isFetching = false
@@ -90,6 +103,18 @@ export default function ConfirmacionPage({
           <div className="card p-10 flex flex-col items-center gap-4">
             <span className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
             <p className="text-sm text-gray-400">Cargando estado de tu solicitud...</p>
+          </div>
+        ) : fetchError && !solicitud ? (
+          <div className="card p-10 flex flex-col items-center gap-4 text-center">
+            <XCircle size={40} className="text-red-500 mb-2" />
+            <h2 className="text-lg font-bold text-white">Error de conexión</h2>
+            <p className="text-sm text-gray-400">No se pudo cargar el estado de la solicitud. Revisa tu conexión a internet o intenta de nuevo.</p>
+            <button onClick={() => { setLoading(true); window.location.reload() }} className="btn-primary mt-4 w-full justify-center py-3">
+              Reintentar
+            </button>
+            <Link href="/" className="btn-secondary mt-2 w-full justify-center py-3">
+              Volver al inicio
+            </Link>
           </div>
         ) : solicitud?.estado === 'APROBADA' ? (
           /* ── APROBADA: mostrar QR prominente ── */

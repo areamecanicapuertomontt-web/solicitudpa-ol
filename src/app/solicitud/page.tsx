@@ -929,7 +929,7 @@ export default function SolicitudPage() {
                       />
                     </div>
                     {/* Descripción con autocompletado del catálogo */}
-                    <div className="flex-1 relative" ref={activeAutocomplete === idx ? autocompleteRef : undefined}>
+                    <div className="flex-1 relative min-w-0" ref={activeAutocomplete === idx ? autocompleteRef : undefined}>
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <label className="label !mb-0">Descripción</label>
                         <div className="group relative cursor-help text-gray-400 hover:text-gray-200">
