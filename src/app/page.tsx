@@ -4,8 +4,6 @@ import HomeAuthButtons from '@/components/home-auth-buttons'
 
 
 export default function HomePage() {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-  const solicitudUrl = `${siteUrl}/solicitud`
 
   return (
     <main className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
@@ -53,36 +51,15 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Card central con QR + Botón */}
-          <div className="card p-8 mb-8 animate-fade-in" style={{ animationDelay: '160ms' }}>
-            <div className="flex flex-col sm:flex-row items-center gap-8">
-
-              {/* QR Code display */}
-              <div className="flex-shrink-0 flex flex-col items-center gap-3">
-                <div className="qr-container shadow-2xl animate-pulse-glow">
-                  {/* QR se renderiza en el cliente, aquí placeholder */}
-                  <QRCodeDisplay url={solicitudUrl} />
-                </div>
-                <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>
-                  Escanea con tu celular
-                </p>
-              </div>
-
-              <div className="w-px h-24 hidden sm:block" style={{ background: 'var(--border)' }} />
-              <div className="h-px w-full sm:hidden" style={{ background: 'var(--border)' }} />
-
-              {/* Info + Botón */}
-              <div className="flex-1 text-center sm:text-left">
-                <h3 className="text-xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
-                  ¿Necesitas materiales?
-                </h3>
-                <p className="mb-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  Escanea el QR con tu celular o inicia sesión para llenar el formulario de solicitud.
-                </p>
-                <HomeAuthButtons />
-
-              </div>
-            </div>
+          {/* Card central con Auth */}
+          <div className="card p-8 mb-8 animate-fade-in text-center flex flex-col items-center" style={{ animationDelay: '160ms' }}>
+            <h3 className="text-xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
+              ¿Necesitas materiales?
+            </h3>
+            <p className="mb-6 text-sm max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
+              Inicia sesión con tu cuenta institucional para llenar el formulario de solicitud y revisar el estado de tus pedidos.
+            </p>
+            <HomeAuthButtons />
           </div>
 
           {/* Flujo del proceso */}
@@ -102,7 +79,7 @@ export default function HomePage() {
                   icon: <CheckCircle2 size={20} />,
                   step: '02',
                   title: 'Docente aprueba',
-                  desc: 'Tu docente recibe un correo y aprueba la solicitud con un clic.',
+                  desc: 'Tu docente recibe una notificación push y aprueba la solicitud con un clic.',
                 },
                 {
                   icon: <Package size={20} />,
@@ -161,20 +138,3 @@ export default function HomePage() {
   )
 }
 
-// Componente QR (server-side con import dinámico en cliente)
-// Por simplicidad usamos una imagen SVG placeholder
-// El QR real se genera en /qr page
-function QRCodeDisplay({ url }: { url: string }) {
-  // Usamos la API de Google Charts para generar el QR server-side
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=0D1B2A&margin=0`
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={qrUrl}
-      alt="QR Code para solicitar materiales"
-      width={160}
-      height={160}
-      style={{ display: 'block' }}
-    />
-  )
-}

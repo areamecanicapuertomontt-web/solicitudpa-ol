@@ -971,7 +971,7 @@ export default function SolicitudPage() {
                                     }}
                                   >
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-semibold truncate text-white">
+                                      <p className="text-sm font-semibold line-clamp-2 whitespace-normal break-words text-white">
                                         {e.nombre}
                                       </p>
                                       {e.seccion_nombre && (
@@ -1118,8 +1118,8 @@ export default function SolicitudPage() {
                       style={{ background: 'rgba(255,255,255,0.01)' }}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-white truncate">{e.nombre}</p>
-                        <p className="text-[10px] text-gray-500 truncate">
+                        <p className="font-bold text-white line-clamp-2 whitespace-normal break-words">{e.nombre}</p>
+                        <p className="text-[10px] text-gray-500 line-clamp-1 whitespace-normal break-words">
                           {e.seccion_nombre} {e.codigo_inventario ? `· Inv: ${e.codigo_inventario}` : ''}
                         </p>
                       </div>
