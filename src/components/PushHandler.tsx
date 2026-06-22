@@ -6,7 +6,7 @@ import { supabaseBrowser } from '@/lib/supabase-browser'
 import { subscribeToPush } from '@/lib/push'
 import { RefreshCw, X } from 'lucide-react'
 
-const CURRENT_VERSION = '1.3.0'
+const CURRENT_VERSION = 'v9'
 
 export default function PushHandler() {
   const [updateAvailable, setUpdateAvailable] = useState(false)

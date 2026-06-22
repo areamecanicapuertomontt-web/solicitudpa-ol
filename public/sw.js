@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
 
-const CACHE_NAME = "pañol-cache-v8";
+const CACHE_NAME = "pañol-cache-v9";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -91,13 +91,14 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
+  const rawUrl = event.notification.data?.url || "/";
+  const targetUrl = new URL(rawUrl, self.location.origin).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       // 1. Primero intentar enfocar si la URL exacta ya está abierta
       for (const client of clientList) {
-        if (client.url.includes(url) && "focus" in client) {
+        if (client.url === targetUrl && "focus" in client) {
           return client.focus();
         }
       }
@@ -105,13 +106,13 @@ self.addEventListener("notificationclick", (event) => {
       for (const client of clientList) {
         if ("focus" in client && "navigate" in client) {
           return client.focus().then((focusedClient) => {
-            if (focusedClient) return focusedClient.navigate(url);
+            if (focusedClient) return focusedClient.navigate(targetUrl);
           });
         }
       }
       // 3. Como último recurso, abrimos una nueva ventana
       if (self.clients.openWindow) {
-        return self.clients.openWindow(url);
+        return self.clients.openWindow(targetUrl);
       }
     })
   );
