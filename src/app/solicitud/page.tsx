@@ -293,6 +293,7 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
 export default function SolicitudPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'form' | 'mis-solicitudes'>('form')
+  const [isSlowConnection, setIsSlowConnection] = useState(false)
   const [openIdFromUrl, setOpenIdFromUrl] = useState<string | null>(null)
   const handleTabInit = useCallback((tab: 'form' | 'mis-solicitudes', id: string | null) => {
     setActiveTab(tab)
@@ -505,8 +506,15 @@ export default function SolicitudPage() {
   }, [])
 
   useEffect(() => {
+    let slowConnectionTimer: NodeJS.Timeout
+
     async function loadProfile() {
       try {
+        // Mostrar mensaje de servidor lento si tarda más de 5 segundos
+        slowConnectionTimer = setTimeout(() => {
+          setIsSlowConnection(true)
+        }, 5000)
+
         const userPromise = supabaseClient.auth.getUser()
 
         // Auto-reinicio silencioso a los 4s para destrabar PWA en móviles
@@ -576,6 +584,7 @@ export default function SolicitudPage() {
           setValue('seccion', seccionVal || 'N/A')
         }
         setProfileLoaded(true)
+        clearTimeout(slowConnectionTimer)
       } catch (err) {
         // Un solo reintento silencioso después de 3 segundos
         console.warn("loadProfile falló en frío, reintentando en 3s...", err)
@@ -626,6 +635,7 @@ export default function SolicitudPage() {
             console.error("Error loading profile (reintento fallido):", retryErr)
           } finally {
             setProfileLoaded(true)
+            clearTimeout(slowConnectionTimer)
           }
         }, 3000)
       }
@@ -765,6 +775,11 @@ export default function SolicitudPage() {
 
         {!profileLoaded ? (
           <div className="animate-pulse space-y-6">
+            {isSlowConnection && (
+              <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-500 text-center text-sm font-medium animate-fade-in">
+                El servidor está despertando, esto puede tomar hasta un minuto... ⏳
+              </div>
+            )}
             <div className="h-14 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
             <div className="h-14 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
             <div className="grid grid-cols-2 gap-4">

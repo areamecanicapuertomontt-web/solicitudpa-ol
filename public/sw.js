@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
 
-const CACHE_NAME = "pañol-cache-v9";
+const CACHE_NAME = "pañol-cache-v10";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -102,15 +102,7 @@ self.addEventListener("notificationclick", (event) => {
           return client.focus();
         }
       }
-      // 2. Si no, pero hay alguna ventana de la app abierta, la enfocamos y navegamos a la URL
-      for (const client of clientList) {
-        if ("focus" in client && "navigate" in client) {
-          return client.focus().then((focusedClient) => {
-            if (focusedClient) return focusedClient.navigate(targetUrl);
-          });
-        }
-      }
-      // 3. Como último recurso, abrimos una nueva ventana
+      // 2. Si no está abierta la URL exacta, abrimos una nueva ventana (más confiable que client.navigate)
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
