@@ -178,20 +178,16 @@ export async function PATCH(
           return Response.json({ error: 'Error al registrar la partición de la devolución' }, { status: 500 })
         }
 
-        // 3. Mover los ítems devueltos a la nueva solicitud
-        for (const item of itemsDevueltos) {
-          const { error: itemUpdateErr } = await supabase
-            .from('items_solicitud')
-            .update({
-              solicitud_id: newSol.id,
-              devuelto: true
-            })
-            .eq('id', item.id)
+        // Mover los ítems devueltos a la nueva solicitud en un solo UPDATE (en vez de N roundtrips)
+        const itemsDevueltosIds = itemsDevueltos.map(i => i.id)
+        const { error: itemUpdateErr } = await supabase
+          .from('items_solicitud')
+          .update({ solicitud_id: newSol.id, devuelto: true })
+          .in('id', itemsDevueltosIds)
 
-          if (itemUpdateErr) {
-            console.error(`Error al mover ítem ${item.id} a la nueva solicitud:`, itemUpdateErr)
-            return Response.json({ error: 'Error al redistribuir materiales en la base de datos' }, { status: 500 })
-          }
+        if (itemUpdateErr) {
+          console.error('Error al mover ítems devueltos a la nueva solicitud:', itemUpdateErr)
+          return Response.json({ error: 'Error al redistribuir materiales en la base de datos' }, { status: 500 })
         }
       }
 

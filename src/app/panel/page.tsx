@@ -1076,7 +1076,8 @@ export default function PanelPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ items: itemsPayload })
+        body: JSON.stringify({ items: itemsPayload }),
+        signal: AbortSignal.timeout(30000) // El botón nunca queda pegado más de 30s
       })
 
       const json = await res.json()
@@ -1088,7 +1089,11 @@ export default function PanelPage() {
       setSelectedId(null)
       fetchSolicitudes(true)
     } catch (err: any) {
-      setDevolucionError('Error de conexión o del servidor')
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        setDevolucionError('El servidor tardó demasiado en responder. La devolución puede haberse registrado igual — recarga la página para verificar.')
+      } else {
+        setDevolucionError('Error de conexión o del servidor')
+      }
     } finally {
       setSubmittingReturn(false)
     }
