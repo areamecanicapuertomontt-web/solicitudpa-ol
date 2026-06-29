@@ -10,13 +10,9 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'Datos incompletos: userIds, title y body son obligatorios' }, { status: 400 })
     }
 
-    const result = await enviarPushNotificacion(userIds, title, msgBody, url)
+    enviarPushNotificacion(userIds, title, msgBody, url).catch(console.error)
 
-    if (!result.success) {
-      return Response.json({ error: result.error }, { status: 500 })
-    }
-
-    return Response.json({ ok: true, count: result.count })
+    return Response.json({ ok: true, count: -1 })
   } catch (error: any) {
     console.error('Error en POST /api/notificaciones/send:', error)
     return Response.json({ error: 'Error interno del servidor' }, { status: 500 })

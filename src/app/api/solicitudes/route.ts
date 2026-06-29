@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     // 4. Enviar notificación push al DOCENTE asignado y al ALUMNO (si tiene cuenta)
     try {
       // Notificación al docente
-      await enviarPushNotificacion(
+      enviarPushNotificacion(
         docente_id,
         'Nueva Solicitud Pendiente 📋',
         `El alumno ${alumno} ha solicitado herramientas para la asignatura "${asignatura}". Revisa el panel para decidir.`,
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (alumnoUserId) {
-        await enviarPushNotificacion(
+        enviarPushNotificacion(
           alumnoUserId,
           'Solicitud Recibida 🛠️',
           `Hola ${alumno.split(' ')[0]}, tu solicitud para "${asignatura}" fue ingresada. Te avisaremos cuando el docente responda.`,

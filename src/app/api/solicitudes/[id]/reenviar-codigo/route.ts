@@ -74,7 +74,7 @@ export async function POST(
     }
 
     // 6. Enviar la notificación push en background — responder de inmediato
-    await enviarPushNotificacion(
+    enviarPushNotificacion(
       alumnoUserId,
       'Código de Retiro 📦',
       `El código para retirar tus materiales es: ${solicitud.codigo_entrega}`,
