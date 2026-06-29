@@ -75,9 +75,9 @@ export async function PATCH(
       return Response.json({ error: 'No se pudo cargar la solicitud de préstamo original' }, { status: 500 })
     }
 
-    // 4. Buscar ID del alumno
+    // 4. Buscar ID del alumno en perfiles (por RUT o email)
     let alumnoUserId: string | null = null
-    const orQuery = []
+    const orQuery: string[] = []
     if (solOriginal.rut) orQuery.push(`rut.eq.${solOriginal.rut}`)
     if (solOriginal.alumno_email) orQuery.push(`email.eq.${solOriginal.alumno_email}`)
 
@@ -89,6 +89,29 @@ export async function PATCH(
         .limit(1)
         .maybeSingle()
       if (alumnoProfile) alumnoUserId = alumnoProfile.id
+    }
+
+    // IMPORTANTE: solOriginal.docente_id es el ID de la tabla 'docentes' (catálogo),
+    // NO el user_id de auth/perfiles que necesita push_subscriptions.
+    // Resolver el user_id real buscando por email del docente en perfiles.
+    let docenteUserId: string | null = null
+    const docenteEmail = solOriginal.docente?.email
+    if (docenteEmail) {
+      const { data: docenteProfile, error: docenteProfileErr } = await supabase
+        .from('perfiles')
+        .select('id')
+        .eq('email', docenteEmail)
+        .maybeSingle()
+      if (docenteProfileErr) {
+        console.error('[devolver/route] Error buscando perfil del docente por email:', docenteProfileErr.message, '| email:', docenteEmail)
+      } else if (docenteProfile) {
+        docenteUserId = docenteProfile.id
+        console.log('[devolver/route] ✅ Docente user_id resuelto:', docenteUserId, 'para email:', docenteEmail)
+      } else {
+        console.warn('[devolver/route] ⚠️ No se encontró perfil en perfiles para docente con email:', docenteEmail, '— el docente puede no tener cuenta.')
+      }
+    } else {
+      console.warn('[devolver/route] ⚠️ La solicitud no tiene email de docente asociado — imposible resolver user_id para push.')
     }
 
     if (devolucionCompleta) {
@@ -114,7 +137,8 @@ export async function PATCH(
       }
 
       // Enviar notificaciones de devolución completa
-      const targetUserIdsCompleta = [solOriginal.docente_id]
+      const targetUserIdsCompleta: string[] = []
+      if (docenteUserId) targetUserIdsCompleta.push(docenteUserId)
       if (alumnoUserId) targetUserIdsCompleta.push(alumnoUserId)
 
       enviarPushNotificacion(
@@ -183,7 +207,8 @@ export async function PATCH(
       }
 
       // 5. Enviar alertas push con los ítems pendientes al docente, alumno y director
-      const targetUserIds = [solOriginal.docente_id]
+      const targetUserIds: string[] = []
+      if (docenteUserId) targetUserIds.push(docenteUserId)
       if (alumnoUserId) targetUserIds.push(alumnoUserId)
       
       // Buscar el perfil del director por su email
