@@ -141,7 +141,7 @@ export async function PATCH(
       if (docenteUserId) targetUserIdsCompleta.push(docenteUserId)
       if (alumnoUserId) targetUserIdsCompleta.push(alumnoUserId)
 
-      enviarPushNotificacion(
+      await enviarPushNotificacion(
         targetUserIdsCompleta,
         'Material Devuelto 📦',
         `El alumno ${solOriginal.alumno} ha devuelto todo el material correctamente al pañol.`,
@@ -224,7 +224,7 @@ export async function PATCH(
         }
       }
 
-      enviarPushNotificacion(
+      await enviarPushNotificacion(
         targetUserIds,
         '⚠️ Alerta: Material Faltante',
         `El alumno ${solOriginal.alumno} realizó una devolución parcial. Quedan herramientas pendientes de retornar al pañol.`,
