@@ -100,7 +100,10 @@ export default function PushHandler() {
     }
 
     // 3. Detección específica de iOS (Safari) y modo Standalone (PWA)
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    // NOTA: navigator.platform está deprecado y puede devolver 'MacIntel' en Chrome desktop.
+    // Usamos navigator.vendor (solo 'Apple Computer, Inc.' en Safari/iOS real) para evitar falsos positivos.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+               || (/Apple/i.test(navigator.vendor) && navigator.maxTouchPoints > 1)
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in navigator && (navigator as any).standalone === true)
 
     if (isIOS && !isStandalone) {
