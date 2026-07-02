@@ -11,6 +11,14 @@ const CURRENT_VERSION = 'v10'
 export default function PushHandler() {
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [showIOSPrompt, setShowIOSPrompt] = useState(false)
+  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default')
+  const [hidePermissionPrompt, setHidePermissionPrompt] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPermissionStatus(Notification.permission)
+    }
+  }, [])
 
   const applyUpdate = () => {
     if (typeof caches !== 'undefined') {
@@ -128,9 +136,13 @@ export default function PushHandler() {
       console.log(`[PushHandler] Cambio de estado auth: ${event}. Sesión activa:`, !!session)
       const currentId = session?.user?.id
       if (currentId && currentId !== lastSubscribedUserId) {
-        console.log(`[PushHandler] Usuario autenticado (${currentId}). Iniciando suscripción push...`)
-        lastSubscribedUserId = currentId
-        await subscribeToPush(supabaseBrowser, currentId)
+        if (Notification.permission === 'granted') {
+          console.log(`[PushHandler] Usuario autenticado (${currentId}) y permiso concedido. Iniciando suscripción push...`)
+          lastSubscribedUserId = currentId
+          await subscribeToPush(supabaseBrowser, currentId)
+        } else {
+          console.log(`[PushHandler] Usuario autenticado, pero permiso es ${Notification.permission}. Esperando interacción manual.`)
+        }
       } else if (!currentId) {
         console.log('[PushHandler] Sesión cerrada.')
         lastSubscribedUserId = null
@@ -141,9 +153,11 @@ export default function PushHandler() {
     async function checkCurrentUser() {
       const { data: { user } } = await supabaseBrowser.auth.getUser()
       if (user && user.id !== lastSubscribedUserId) {
-        console.log(`[PushHandler] Sesión activa encontrada (${user.id}). Suscribiendo...`)
-        lastSubscribedUserId = user.id
-        await subscribeToPush(supabaseBrowser, user.id)
+        if (Notification.permission === 'granted') {
+          console.log(`[PushHandler] Sesión activa encontrada (${user.id}) y permiso concedido. Suscribiendo...`)
+          lastSubscribedUserId = user.id
+          await subscribeToPush(supabaseBrowser, user.id)
+        }
       }
     }
     checkCurrentUser()
@@ -204,6 +218,57 @@ export default function PushHandler() {
             <p className="text-[11px] text-blue-400 font-medium bg-blue-500/10 p-2.5 rounded-lg border border-blue-500/20 leading-relaxed">
               Toca el botón <span className="font-bold inline-block mx-1">Compartir <span className="text-sm align-middle">📤</span></span> y luego selecciona <span className="font-bold text-white">"Agregar a pantalla de inicio"</span> para activarlas.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner de permiso de notificaciones (solo si no es iOS nativo sin PWA y no hay update) */}
+      {!showIOSPrompt && !updateAvailable && permissionStatus !== 'granted' && !hidePermissionPrompt && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] animate-fade-in px-4 w-full max-w-sm">
+          <div className="bg-[#0D1B2E] border border-amber-500/30 shadow-2xl shadow-amber-900/20 rounded-2xl p-4 flex flex-col gap-3">
+            <div className="flex items-start justify-between">
+              <p className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                🔔 Notificaciones
+              </p>
+              <button 
+                onClick={() => setHidePermissionPrompt(true)}
+                className="text-gray-500 hover:text-white p-1 -mr-2 -mt-2"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {permissionStatus === 'default' ? (
+              <>
+                <p className="text-xs text-gray-300">
+                  Activa las notificaciones para saber cuándo tus materiales están listos para retiro.
+                </p>
+                <button
+                  onClick={async () => {
+                    // El gesto del usuario permite llamar a requestPermission sin bloqueo
+                    const { data: { user } } = await supabaseBrowser.auth.getUser()
+                    if (user) {
+                      const sub = await subscribeToPush(supabaseBrowser, user.id)
+                      if (sub) {
+                        setPermissionStatus('granted')
+                      } else {
+                        setPermissionStatus(Notification.permission)
+                      }
+                    } else {
+                      // Si no está logueado, pedimos permiso igual para tenerlo listo
+                      const perm = await Notification.requestPermission()
+                      setPermissionStatus(perm)
+                    }
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors w-full text-center"
+                >
+                  Activar Notificaciones
+                </button>
+              </>
+            ) : (
+              <p className="text-xs text-red-300 bg-red-500/10 p-2.5 rounded-lg border border-red-500/20">
+                Las notificaciones están bloqueadas. Ve a la configuración de tu dispositivo o navegador para habilitarlas.
+              </p>
+            )}
           </div>
         </div>
       )}
