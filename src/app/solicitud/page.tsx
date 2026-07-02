@@ -40,6 +40,7 @@ import {
   Info
 } from 'lucide-react'
 import { BadgeEstado } from '@/components/BadgeEstado'
+import SolicitudStepper from '@/components/SolicitudStepper'
 import type { Docente } from '@/lib/types'
 import { supabaseClient } from '@/lib/supabase-client'
 import QRCode from 'qrcode'
@@ -200,9 +201,9 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
 
             {/* Detalle expandido */}
             {isOpen && (
-              <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-4">
+              <div className="border-t border-white/5 px-4 pb-4 pt-4 space-y-4">
 
-                {/* Materiales */}
+                {/* Materiales solicitados */}
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">Materiales solicitados</p>
                   <div className="space-y-1">
@@ -218,68 +219,13 @@ function MisSolicitudes({ profile, openId, profileLoaded }: { profile: any; open
                   </div>
                 </div>
 
-                {/* Estado PENDIENTE */}
-                {s.estado === 'PENDIENTE' && (
-                  <div className="rounded-xl p-3 flex items-center gap-2"
-                    style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    <Clock size={14} style={{ color: '#F59E0B', flexShrink: 0 }} />
-                    <p className="text-xs text-amber-300">Esperando confirmación del docente. Esta página se actualiza automáticamente.</p>
-                  </div>
-                )}
-
-                {/* Estado APROBADA: QR prominente */}
-                {s.estado === 'APROBADA' && (
-                  <div className="rounded-xl p-4 flex flex-col items-center"
-                    style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                    <div className="flex items-center gap-1.5 mb-3">
-                      <QrCode size={14} style={{ color: '#22C55E' }} />
-                      <p className="text-xs font-bold" style={{ color: '#22C55E' }}>QR de Retiro — Muéstraselo al pañolero</p>
-                    </div>
-                    {qr ? (
-                      <img src={qr} alt="QR de retiro" className="rounded-xl mb-3" style={{ width: 200, height: 200 }} />
-                    ) : (
-                      <div className="w-[200px] h-[200px] rounded-xl bg-white/5 flex items-center justify-center mb-3">
-                        <span className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <KeyRound size={12} className="text-gray-500" />
-                      <span className="text-xs text-gray-500">Código manual:</span>
-                      <span className="font-mono font-black text-base tracking-[.25em]" style={{ color: 'var(--text-primary)' }}>
-                        {s.codigo_entrega}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Estado RECHAZADA */}
-                {s.estado === 'RECHAZADA' && (
-                  <div className="rounded-xl p-3"
-                    style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                    <p className="text-xs text-red-400 font-semibold mb-1">Solicitud rechazada</p>
-                    {s.observaciones && (
-                      <p className="text-xs text-gray-400">Motivo: {s.observaciones}</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Estado ENTREGADA */}
-                {s.estado === 'ENTREGADA' && (
-                  <div className="rounded-xl p-3"
-                    style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.2)' }}>
-                    <p className="text-xs text-blue-400">✅ Materiales entregados. Recuerda devolverlos al pañol al finalizar la clase.</p>
-                  </div>
-                )}
-
-                {/* Estado DEVUELTA / DEVUELTA_INCOMPLETA */}
-                {(s.estado === 'DEVUELTA' || s.estado === 'DEVUELTA_INCOMPLETA') && (
-                  <div className="rounded-xl p-3"
-                    style={{ background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)' }}>
-                    <p className="text-xs" style={{ color: '#A78BFA' }}>
-                      {s.estado === 'DEVUELTA' ? '✅ Materiales devueltos correctamente.' : '⚠️ Devolución registrada con materiales pendientes.'}
-                    </p>
-                  </div>
-                )}
+                {/* Stepper de etapas */}
+                <SolicitudStepper
+                  estado={s.estado}
+                  codigoEntrega={s.codigo_entrega}
+                  qrDataUrl={qr || null}
+                  motivo={s.observaciones}
+                />
 
               </div>
             )}
