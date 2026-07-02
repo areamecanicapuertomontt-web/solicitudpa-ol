@@ -78,22 +78,10 @@ self.addEventListener("push", (event) => {
   }
 
   const title = data.title || "Área Mecánica INACAP";
-  
-  // Extraer ID de la solicitud desde la URL para usarlo como tag y agrupar notificaciones
-  let tag = 'inacap-panol';
-  if (data.url) {
-    const match = data.url.match(/\/solicitud\/([a-f0-9\-]+)/i);
-    if (match) {
-      tag = `solicitud-${match[1]}`;
-    }
-  }
-
   const options = {
     body: data.body || "",
     icon: "/icon.png",
-    badge: "/icon.png", // Icono monocromático pequeño para la barra de estado
-    tag: tag, // Agrupa notificaciones del mismo pedido
-    renotify: true, // Vuelve a vibrar/sonar aunque se agrupe
+    badge: "/icon.png",
     data: { url: data.url || "/" },
     requireInteraction: false,
   };
