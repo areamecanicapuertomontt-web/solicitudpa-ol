@@ -95,7 +95,7 @@ self.addEventListener("push", (event) => {
     tag: tag, // Agrupa notificaciones del mismo pedido para avance en tiempo real
     renotify: true, // Vuelve a vibrar/sonar aunque se agrupe
     data: { url: data.url || "/" },
-    requireInteraction: false,
+    requireInteraction: true, // Mantiene la notificación fija en la bandeja hasta que el usuario la cierre ("sacarlo o no")
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
