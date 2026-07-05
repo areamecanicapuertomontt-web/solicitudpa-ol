@@ -14,21 +14,20 @@ export default function HomeAuthButtons() {
   useEffect(() => {
     async function getSession() {
       try {
-        // Limit session fetch to 3 seconds to avoid infinite loading on offline local devices
-        const userPromise = supabaseBrowser.auth.getUser()
+        // PASO 1: Leer sesión desde caché local (instantáneo, sin red)
+        const { data: { session } } = await supabaseBrowser.auth.getSession()
+        let user = session?.user
 
-        const autoReloadTimer = setTimeout(() => {
-          const hasReloaded = sessionStorage.getItem('reloaded_home')
-          if (!hasReloaded) {
-            sessionStorage.setItem('reloaded_home', 'true')
-            window.location.reload()
-          }
-        }, 4000)
-        const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 4000)
-        )
-        const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
-        clearTimeout(autoReloadTimer)
+        if (!user) {
+          // PASO 2: Si no hay caché, intentar con getUser() pero con timeout de 3s
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), 3000)
+          )
+          const userPromise = supabaseBrowser.auth.getUser()
+          const { data } = await Promise.race([userPromise, timeoutPromise]) as any
+          user = data?.user
+        }
+
         if (user) {
           const { data: perf } = await supabaseBrowser
             .from('perfiles')
@@ -38,9 +37,12 @@ export default function HomeAuthButtons() {
           if (perf) {
             setProfile(perf)
           }
+        } else {
+          setProfile(null)
         }
       } catch (err) {
         console.error('Error fetching session in HomeAuthButtons:', err)
+        setProfile(null)
       } finally {
         setLoading(false)
       }

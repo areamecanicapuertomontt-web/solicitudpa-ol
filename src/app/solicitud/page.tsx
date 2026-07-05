@@ -441,139 +441,92 @@ export default function SolicitudPage() {
     return () => clearInterval(interval)
   }, [])
 
+  const [profileError, setProfileError] = useState<string | null>(null)
+
   useEffect(() => {
     let slowConnectionTimer: NodeJS.Timeout
 
     async function loadProfile() {
       try {
-        // Mostrar mensaje de servidor lento si tarda más de 5 segundos
         slowConnectionTimer = setTimeout(() => {
           setIsSlowConnection(true)
         }, 5000)
 
-        const userPromise = supabaseClient.auth.getUser()
+        // PASO 1: Leer sesión desde caché local (instantáneo, sin red)
+        const { data: { session } } = await supabaseClient.auth.getSession()
+        let user = session?.user
 
-        // Auto-reinicio silencioso a los 4s para destrabar PWA en móviles
-        const autoReloadTimer = setTimeout(() => {
-          const hasReloaded = sessionStorage.getItem('reloaded_solicitud')
-          if (!hasReloaded) {
-            sessionStorage.setItem('reloaded_solicitud', 'true')
-            window.location.reload()
-          }
-        }, 4000)
-
-        const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 4000)
-        )
-        const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
-        clearTimeout(autoReloadTimer)
-
-        if (user) {
-          let perf = null
-          try {
-            const { data } = await supabaseClient
-              .from('perfiles')
-              .select('*')
-              .eq('id', user.id)
-              .single()
-            perf = data
-          } catch (e) {
-            console.error("Error cargando perfil desde tabla perfiles:", e)
-          }
-
-          // Fallback: Si no existe en la tabla perfiles, usamos metadatos de auth
-          if (!perf) {
-            perf = {
-              id: user.id,
-              email: user.email,
-              nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-              rol: user.user_metadata?.rol || 'ALUMNO',
-              rut: user.user_metadata?.rut || '',
-              jornada: user.user_metadata?.jornada || 'D',
-              seccion: user.user_metadata?.seccion || '',
-            }
-          }
-
-          setProfile(perf)
-          setValue('alumno', perf.nombre || '')
-          setValue('rut', perf.rut || '')
-          setValue('alumno_email', perf.email || '')
-          if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
-
-          // Carrera: primero desde columna carrera, luego detección por sección (compatibilidad)
-          const carreraFromProfile = perf.carrera || null
-          const seccionVal = perf.seccion || ''
-
-          let detected = carreraFromProfile
-          if (!detected) {
-            // fallback: detectar por nombre de sección
-            detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi')
-              ? 'IMI'
-              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi')
-              ? 'MI'
-              : 'ALL'
-          }
-
-          setSelectedCarrera(detected || 'ALL')
-
-          // Sección: siempre guardamos el valor de sección (aunque sea largo, o fallback a 'N/A')
-          setValue('seccion', seccionVal || 'N/A')
+        if (!user) {
+          // PASO 2: Si no hay caché, intentar con getUser() pero con timeout de 4s
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout de auth')), 4000)
+          )
+          const userPromise = supabaseClient.auth.getUser()
+          const { data } = await Promise.race([userPromise, timeoutPromise]) as any
+          user = data?.user
         }
+
+        if (!user) {
+          // No hay sesión, redirigir a login
+          window.location.href = '/login'
+          return
+        }
+
+        // PASO 3: Cargar perfil desde Supabase con timeout de 4s
+        const profileTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de perfil')), 4000)
+        )
+        const profilePromise = supabaseClient
+          .from('perfiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        let perf = null
+        try {
+          const { data, error } = await Promise.race([profilePromise, profileTimeout]) as any
+          if (!error && data) perf = data
+        } catch (e) {
+          console.error("Error cargando perfil desde tabla perfiles:", e)
+        }
+
+        // Fallback: Si no existe en la tabla perfiles o falló red, usamos metadatos de auth
+        if (!perf) {
+          perf = {
+            id: user.id,
+            email: user.email,
+            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
+            rol: user.user_metadata?.rol || 'ALUMNO',
+            rut: user.user_metadata?.rut || '',
+            jornada: user.user_metadata?.jornada || 'D',
+            seccion: user.user_metadata?.seccion || '',
+          }
+        }
+
+        setProfile(perf)
+        setValue('alumno', perf.nombre || '')
+        setValue('rut', perf.rut || '')
+        setValue('alumno_email', perf.email || '')
+        if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
+
+        const carreraFromProfile = perf.carrera || null
+        const seccionVal = perf.seccion || ''
+        let detected = carreraFromProfile
+        if (!detected) {
+          detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi') ? 'IMI'
+            : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi') ? 'MI'
+            : 'ALL'
+        }
+        setSelectedCarrera(detected || 'ALL')
+        setValue('seccion', seccionVal || 'N/A')
+
         setProfileLoaded(true)
         clearTimeout(slowConnectionTimer)
       } catch (err) {
-        // Un solo reintento silencioso después de 3 segundos
-        console.warn("loadProfile falló en frío, reintentando en 3s...", err)
-        setTimeout(async () => {
-          try {
-            const userPromise = supabaseClient.auth.getUser()
-            const retryTimeoutPromise = new Promise<any>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout de reintento')), 4000)
-            )
-            const { data: { user } } = await Promise.race([userPromise, retryTimeoutPromise])
-            if (!user) {
-              setProfileLoaded(true)
-              return
-            }
-            let perf = null
-            try {
-              const { data } = await supabaseClient
-                .from('perfiles')
-                .select('*')
-                .eq('id', user.id)
-                .single()
-              perf = data
-            } catch (_) {}
-            if (!perf) {
-              perf = {
-                id: user.id,
-                email: user.email,
-                nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-                rol: user.user_metadata?.rol || 'ALUMNO',
-                rut: user.user_metadata?.rut || '',
-                jornada: user.user_metadata?.jornada || 'D',
-                seccion: user.user_metadata?.seccion || '',
-              }
-            }
-            setProfile(perf)
-            setValue('alumno', perf.nombre || '')
-            setValue('rut', perf.rut || '')
-            setValue('alumno_email', perf.email || '')
-            if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
-            const seccionVal = perf.seccion || ''
-            const detected = perf.carrera
-              || (seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi') ? 'IMI'
-              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi') ? 'MI'
-              : 'ALL')
-            setSelectedCarrera(detected)
-            setValue('seccion', seccionVal || 'N/A')
-          } catch (retryErr) {
-            console.error("Error loading profile (reintento fallido):", retryErr)
-          } finally {
-            setProfileLoaded(true)
-            clearTimeout(slowConnectionTimer)
-          }
-        }, 3000)
+        console.error('[solicitud] Timeout o error de red en carga de perfil:', err)
+        setProfileError('No se pudo cargar tu perfil por un problema de red. Por favor, recarga la página.')
+        setProfileLoaded(true)
+        clearTimeout(slowConnectionTimer)
       }
     }
     loadProfile()
@@ -724,6 +677,17 @@ export default function SolicitudPage() {
             </div>
             <div className="h-32 bg-gray-800/30 rounded-2xl border border-gray-800"></div>
             <div className="h-14 bg-red-900/30 rounded-2xl border border-red-900/50"></div>
+          </div>
+        ) : profileError ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4 text-center animate-fade-in">
+            <AlertCircle size={48} className="text-red-500 mx-auto opacity-80" />
+            <p className="text-gray-300 max-w-sm">{profileError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-6 py-2 bg-red-500/20 text-red-400 font-bold rounded-xl hover:bg-red-500/30 transition-colors border border-red-500/30"
+            >
+              Reintentar
+            </button>
           </div>
         ) : activeTab === 'mis-solicitudes' ? (
           <MisSolicitudes profile={profile} openId={openIdFromUrl} profileLoaded={profileLoaded} />
