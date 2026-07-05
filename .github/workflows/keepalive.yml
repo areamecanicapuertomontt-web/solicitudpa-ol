@@ -24,7 +24,7 @@ jobs:
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             --max-time 10 \
-            "https://citudpa-ol.vercel.app/api/keepalive")
+            "https://solicitudpa-ol.vercel.app/api/keepalive")
           echo "HTTP Status: $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "❌ El ping falló con status $STATUS"

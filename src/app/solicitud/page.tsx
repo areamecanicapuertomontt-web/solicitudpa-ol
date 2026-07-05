@@ -463,7 +463,7 @@ export default function SolicitudPage() {
         }, 4000)
 
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 60000)
+          setTimeout(() => reject(new Error('Timeout')), 4000)
         )
         const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
         clearTimeout(autoReloadTimer)
@@ -528,7 +528,7 @@ export default function SolicitudPage() {
           try {
             const userPromise = supabaseClient.auth.getUser()
             const retryTimeoutPromise = new Promise<any>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout de reintento')), 60000)
+              setTimeout(() => reject(new Error('Timeout de reintento')), 4000)
             )
             const { data: { user } } = await Promise.race([userPromise, retryTimeoutPromise])
             if (!user) {

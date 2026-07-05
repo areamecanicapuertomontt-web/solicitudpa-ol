@@ -25,7 +25,7 @@ export default function HomeAuthButtons() {
           }
         }, 4000)
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 60000)
+          setTimeout(() => reject(new Error('Timeout')), 4000)
         )
         const { data: { user } } = await Promise.race([userPromise, timeoutPromise])
         clearTimeout(autoReloadTimer)
