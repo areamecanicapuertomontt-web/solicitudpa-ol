@@ -32,80 +32,67 @@ export async function PATCH(
       return Response.json({ error: 'Sesión no activa' }, { status: 401 })
     }
 
-    const { data: perf, error: perfErr } = await supabase
-      .from('perfiles')
-      .select('rol')
-      .eq('id', user.id)
-      .single()
+    // Perfil (permisos), items y solicitud original son independientes → en paralelo
+    const [
+      { data: perf, error: perfErr },
+      { data: allItems, error: itemsErr },
+      { data: solOriginal, error: solErr },
+    ] = await Promise.all([
+      supabase.from('perfiles').select('rol').eq('id', user.id).single(),
+      supabase.from('items_solicitud').select('*').eq('solicitud_id', id),
+      supabase.from('solicitudes').select('*, docente:docentes(*)').eq('id', id).single(),
+    ])
 
     if (perfErr || !perf || (perf.rol !== 'ADMIN' && perf.rol !== 'PANOL')) {
       return Response.json({ error: 'No autorizado para registrar devoluciones' }, { status: 403 })
     }
 
-    // 2. Consultar todos los items originales de esta solicitud
-    const { data: allItems, error: itemsErr } = await supabase
-      .from('items_solicitud')
-      .select('*')
-      .eq('solicitud_id', id)
-
     if (itemsErr || !allItems || allItems.length === 0) {
       return Response.json({ error: 'No se encontraron items para esta solicitud' }, { status: 404 })
     }
-
-    // Clasificar ítems de acuerdo a lo recibido en el body
-    const devueltosIds = new Set(
-      items.filter((item: any) => item.devuelto === true).map((item: any) => item.id)
-    )
-
-    const itemsDevueltos = allItems.filter(i => devueltosIds.has(i.id))
-    const itemsPendientes = allItems.filter(i => !devueltosIds.has(i.id))
-
-    const devolucionCompleta = itemsPendientes.length === 0
-    let nuevoEstado = 'DEVUELTA'
-
-    // 3. Obtener los datos de la solicitud original
-    const { data: solOriginal, error: solErr } = await supabase
-      .from('solicitudes')
-      .select('*, docente:docentes(*)')
-      .eq('id', id)
-      .single()
 
     if (solErr || !solOriginal) {
       console.error('Error cargando la solicitud original:', solErr)
       return Response.json({ error: 'No se pudo cargar la solicitud de préstamo original' }, { status: 500 })
     }
 
-    // 4. Buscar ID del alumno en perfiles (por RUT o email)
+    // Clasificar ítems de acuerdo a lo recibido en el body
+    const devueltosIds = new Set(
+      items.filter((item: any) => item.devuelto === true).map((item: any) => item.id)
+    )
+    const itemsDevueltos = allItems.filter(i => devueltosIds.has(i.id))
+    const itemsPendientes = allItems.filter(i => !devueltosIds.has(i.id))
+    const devolucionCompleta = itemsPendientes.length === 0
+    let nuevoEstado = 'DEVUELTA'
+
+    // 4. Alumno (por RUT/email) y docente (por email) son dos búsquedas de perfil
+    //    independientes entre sí → se resuelven en paralelo.
+    // IMPORTANTE: solOriginal.docente_id es el ID de la tabla 'docentes' (catálogo),
+    // NO el user_id de auth/perfiles que necesita push_subscriptions.
     let alumnoUserId: string | null = null
+    let docenteUserId: string | null = null
+
     const orQuery: string[] = []
     if (solOriginal.rut) orQuery.push(`rut.eq.${solOriginal.rut}`)
     if (solOriginal.alumno_email) orQuery.push(`email.eq.${solOriginal.alumno_email}`)
-
-    if (orQuery.length > 0) {
-      const { data: alumnoProfile } = await supabase
-        .from('perfiles')
-        .select('id')
-        .or(orQuery.join(','))
-        .limit(1)
-        .maybeSingle()
-      if (alumnoProfile) alumnoUserId = alumnoProfile.id
-    }
-
-    // IMPORTANTE: solOriginal.docente_id es el ID de la tabla 'docentes' (catálogo),
-    // NO el user_id de auth/perfiles que necesita push_subscriptions.
-    // Resolver el user_id real buscando por email del docente en perfiles.
-    let docenteUserId: string | null = null
     const docenteEmail = solOriginal.docente?.email
+
+    const [alumnoRes, docenteRes] = await Promise.all([
+      orQuery.length > 0
+        ? supabase.from('perfiles').select('id').or(orQuery.join(',')).limit(1).maybeSingle()
+        : null,
+      docenteEmail
+        ? supabase.from('perfiles').select('id').eq('email', docenteEmail).maybeSingle()
+        : null,
+    ])
+
+    if (alumnoRes?.data) alumnoUserId = alumnoRes.data.id
+
     if (docenteEmail) {
-      const { data: docenteProfile, error: docenteProfileErr } = await supabase
-        .from('perfiles')
-        .select('id')
-        .eq('email', docenteEmail)
-        .maybeSingle()
-      if (docenteProfileErr) {
-        console.error('[devolver/route] Error buscando perfil del docente por email:', docenteProfileErr.message, '| email:', docenteEmail)
-      } else if (docenteProfile) {
-        docenteUserId = docenteProfile.id
+      if (docenteRes?.error) {
+        console.error('[devolver/route] Error buscando perfil del docente por email:', docenteRes.error.message, '| email:', docenteEmail)
+      } else if (docenteRes?.data) {
+        docenteUserId = docenteRes.data.id
         console.log('[devolver/route] ✅ Docente user_id resuelto:', docenteUserId, 'para email:', docenteEmail)
       } else {
         console.warn('[devolver/route] ⚠️ No se encontró perfil en perfiles para docente con email:', docenteEmail, '— el docente puede no tener cuenta.')
