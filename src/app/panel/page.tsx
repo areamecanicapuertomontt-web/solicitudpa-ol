@@ -15,6 +15,7 @@ import { formatFechaHora, getJornadaLabel } from '@/lib/utils'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { Solicitud, EstadoSolicitud } from '@/lib/types'
 import { BadgeEstado } from '@/components/BadgeEstado'
+import { useAuthProfile } from '@/hooks/useAuthProfile'
 
 import Pagination from '@/components/Pagination'
 
@@ -419,7 +420,7 @@ function DocenteView({
       <div className="max-w-4xl mx-auto px-4 py-6">
 
         {/* Bienvenida */}
-        <div className="card p-5 mb-6 relative overflow-hidden animate-fade-in" style={{ background: 'linear-gradient(135deg, rgba(230,57,70,0.12) 0%, rgba(17,34,64,0.6) 100%)', borderColor: 'rgba(230,57,70,0.2)' }}>
+        <div className="card p-5 mb-6 relative overflow-hidden animate-fade-in" style={{ background: 'linear-gradient(135deg, rgba(230,57,70,0.12) 0%, rgba(11,34,64,0.6) 100%)', borderColor: 'rgba(230,57,70,0.2)' }}>
           <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
             <GraduationCap size={96} />
           </div>
@@ -663,15 +664,18 @@ export default function PanelPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [modalSolicitud, setModalSolicitud] = useState<Solicitud | null>(null)
   const [isLive, setIsLive] = useState(false)
-  const [profile, setProfile] = useState<any>(null)
   const [reenviando, setReenviando] = useState<string | null>(null)
-  const [loadingProfile, setLoadingProfile] = useState(true)
+
+  const { profile, loadingProfile } = useAuthProfile({
+    fallbackRole: 'PANOL',
+    autoReload: true,
+    autoReloadKey: 'reloaded_panel',
+    safetyTimeoutMs: 60000,
+  })
 
   // ── Pagination States ──
   const itemsPerPage = 10
   const [page, setPage] = useState(1)
-
-  const profileLoadedRef = useRef(false)
 
   // Reset page and selection when search or filters change
   useEffect(() => {
@@ -690,142 +694,6 @@ export default function PanelPage() {
   const [showRechazoForm, setShowRechazoForm] = useState(false)
   const [decisionError, setDecisionError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let active = true
-
-    async function fetchProfile(user: any) {
-      if (!user) return
-      
-      let profileData = null
-      let profileError = null
-      
-      try {
-        // Promesa para la consulta a perfiles
-        const queryPromise = supabaseBrowser
-          .from('perfiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        // Promesa de timeout para evitar cuelgues de red infinitos
-        const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 10000)
-        )
-        
-        // Competir: el primero que responda
-        const res = await Promise.race([queryPromise, timeoutPromise])
-        profileData = res.data
-        profileError = res.error
-      } catch (err: any) {
-        profileError = err
-      }
-      
-      if (active) {
-        if (!profileError && profileData) {
-          setProfile(profileData)
-          setLoadingProfile(false)
-          profileLoadedRef.current = true
-        } else {
-          console.warn("Error o timeout al cargar perfil, usando fallback temporal:", profileError)
-          // Fallback temporal usando metadata de auth
-          const fallbackPerf = {
-            id: user.id,
-            email: user.email,
-            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-            rol: user.user_metadata?.rol || 'PANOL',
-            rut: user.user_metadata?.rut || '',
-            jornada: user.user_metadata?.jornada || 'D',
-            seccion: user.user_metadata?.seccion || '',
-          }
-          setProfile(fallbackPerf)
-          setLoadingProfile(false) // Quitar loading inmediatamente
-          profileLoadedRef.current = true
-          
-          // Reintentar en 1.5 segundos por si RLS estaba esperando la sincronización del token
-          setTimeout(async () => {
-            if (!active) return
-            console.log("Reintentando cargar perfil desde la tabla perfiles...")
-            try {
-              const queryPromise = supabaseBrowser
-                .from('perfiles')
-                .select('*')
-                .eq('id', user.id)
-                .single()
-              
-              const timeoutPromise = new Promise<any>((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout de reintento')), 60000)
-              )
-              
-              const retryRes = await Promise.race([queryPromise, timeoutPromise])
-              if (!retryRes.error && retryRes.data) {
-                console.log("✅ Perfil cargado exitosamente en reintento.")
-                setProfile(retryRes.data)
-              }
-            } catch (retryErr) {
-              console.warn("Reintento de carga de perfil falló o expiró:", retryErr)
-            }
-          }, 1500)
-        }
-      }
-    }
-
-    const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[PanelPage] Evento Auth: ${event}`)
-      if (session?.user) {
-        await fetchProfile(session.user)
-      } else if (event === 'SIGNED_OUT') {
-        router.replace('/login')
-      }
-    })
-
-    // Chequeo inicial
-    supabaseBrowser.auth.getUser().then(({ data: { user } }) => {
-      if (active) {
-        if (user) {
-          fetchProfile(user)
-        } else {
-          // Esperar un momento breve para ver si se restaura la sesión
-          setTimeout(() => {
-            if (active) {
-              supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
-                if (session?.user) {
-                  fetchProfile(session.user)
-                } else if (!session) {
-                  router.replace('/login')
-                }
-              })
-            }
-          }, 1500)
-        }
-      }
-    })
-
-    // Auto-reinicio silencioso a los 4s para destrabar redes en segundo plano
-    const autoReloadTimer = setTimeout(() => {
-      if (active && !profileLoadedRef.current) {
-        const hasReloaded = sessionStorage.getItem('reloaded_panel')
-        if (!hasReloaded) {
-          sessionStorage.setItem('reloaded_panel', 'true')
-          window.location.reload()
-        }
-      }
-    }, 4000)
-
-    // Timeout de seguridad global de 60 segundos (para no chocar con el Cold Start)
-    const safetyTimeout = setTimeout(() => {
-      if (active && !profileLoadedRef.current) {
-        console.warn("[PanelPage] Timeout global de 60s expiró sin perfil. Redirigiendo a /login...");
-        router.replace('/login')
-      }
-    }, 60000)
-
-    return () => {
-      active = false
-      subscription.unsubscribe()
-      clearTimeout(safetyTimeout)
-      clearTimeout(autoReloadTimer)
-    }
-  }, [router])
 
   async function handleLogout() {
     try {
@@ -1172,7 +1040,7 @@ export default function PanelPage() {
             <Wifi size={12} style={{ color: isLive ? '#22C55E' : '#60A5FA' }} />
           </div>
           <NotificationBell />
-          <HelpButton rol={profile?.rol} />
+          <HelpButton rol={profile?.rol as 'ADMIN' | 'DOCENTE' | 'PANOL' | 'ALUMNO' | undefined} />
           <button onClick={() => fetchSolicitudes(false)} className="btn-secondary !px-3 !py-2" title="Actualizar">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>

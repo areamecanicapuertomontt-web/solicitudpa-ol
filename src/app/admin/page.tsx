@@ -18,6 +18,7 @@ import NotificationBell from '@/components/NotificationBell'
 import HelpButton from '@/components/HelpButton'
 
 import Pagination from '@/components/Pagination'
+import { useAuthProfile } from '@/hooks/useAuthProfile'
 
 
 type Tab = 'dashboard' | 'docentes' | 'alumnos' | 'solicitudes' | 'listo' | 'diagnostico'
@@ -37,16 +38,18 @@ const CARRERA_NOMBRES: Record<string, string> = {
 export default function AdminPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [profile, setProfile] = useState<any>(null)
-  const [loadingProfile, setLoadingProfile] = useState(true)
-  const profileLoadedRef = useRef(false)
-  
+  const { profile, loadingProfile } = useAuthProfile({
+    allowedRoles: ['ADMIN', 'PANOL'],
+    fallbackRole: 'PANOL',
+    autoReload: false,
+    safetyTimeoutMs: 10000,
+  })
+
   // Data lists
   const [docentes, setDocentes] = useState<Docente[]>([])
   const [alumnos, setAlumnos] = useState<any[]>([])
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
 
-  
   // Counts / Database Diagnostics
   const [stats, setStats] = useState({
     alumnosDiurno: 0,
@@ -60,14 +63,14 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
-  
+
   // Search and Filters
   const [searchDocente, setSearchDocente] = useState('')
   const [searchAlumno, setSearchAlumno] = useState('')
   const [searchSolicitud, setSearchSolicitud] = useState('')
   const [filtroSolicitudEstado, setFiltroSolicitudEstado] = useState<EstadoSolicitud | 'TODAS'>('TODAS')
   const [filtroSolicitudJornada, setFiltroSolicitudJornada] = useState<Jornada | 'TODAS'>('TODAS')
-  
+
   // Sub-tabs Alumnos
   const [subTabAlumnos, setSubTabAlumnos] = useState<'diurno' | 'vespertino'>('diurno')
 
@@ -120,142 +123,7 @@ export default function AdminPage() {
     setPageSolicitudesActivas(1)
     setPageSolicitudesListo(1)
   }, [searchSolicitud, filtroSolicitudEstado, filtroSolicitudJornada])
-  
 
-
-  // Load User Profile
-  useEffect(() => {
-    let active = true
-
-    async function fetchProfile(user: any) {
-      if (!user) return
-      
-      let profileData = null
-      let profileError = null
-      
-      try {
-        const queryPromise = supabaseBrowser
-          .from('perfiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 10000)
-        )
-        
-        const res = await Promise.race([queryPromise, timeoutPromise])
-        profileData = res.data
-        profileError = res.error
-      } catch (err: any) {
-        profileError = err
-      }
-      
-      if (active) {
-        if (!profileError && profileData) {
-          if (profileData.rol !== 'ADMIN' && profileData.rol !== 'PANOL') {
-            router.replace('/login')
-          } else {
-            setProfile(profileData)
-            setLoadingProfile(false)
-            profileLoadedRef.current = true
-          }
-        } else {
-          console.warn("Error al cargar perfil admin en primer intento, usando fallback temporal:", profileError)
-          // Fallback temporal usando metadata de auth
-          const fallbackPerf = {
-            id: user.id,
-            email: user.email,
-            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-            rol: user.user_metadata?.rol || 'PANOL',
-            rut: user.user_metadata?.rut || '',
-          }
-          
-          if (fallbackPerf.rol !== 'ADMIN' && fallbackPerf.rol !== 'PANOL') {
-            router.replace('/login')
-          } else {
-            setProfile(fallbackPerf)
-            setLoadingProfile(false) // Quitar loading inmediatamente
-            profileLoadedRef.current = true
-            
-            // Reintentar en 1.5 segundos por si RLS estaba esperando la sincronización del token
-            setTimeout(async () => {
-              if (!active) return
-              console.log("Reintentando cargar perfil admin desde perfiles...")
-              try {
-                const queryPromise = supabaseBrowser
-                  .from('perfiles')
-                  .select('*')
-                  .eq('id', user.id)
-                  .single()
-                
-                const timeoutPromise = new Promise<any>((_, reject) =>
-                  setTimeout(() => reject(new Error('Timeout de reintento')), 10000)
-                )
-                
-                const retryRes = await Promise.race([queryPromise, timeoutPromise])
-                if (!retryRes.error && retryRes.data) {
-                  if (retryRes.data.rol !== 'ADMIN' && retryRes.data.rol !== 'PANOL') {
-                    router.replace('/login')
-                  } else {
-                    console.log("✅ Perfil admin cargado exitosamente en reintento.")
-                    setProfile(retryRes.data)
-                  }
-                }
-              } catch (retryErr) {
-                console.warn("Reintento admin falló o expiró:", retryErr)
-              }
-            }, 1500)
-          }
-        }
-      }
-    }
-
-    const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AdminPage] Evento Auth: ${event}`)
-      if (session?.user) {
-        await fetchProfile(session.user)
-      } else if (event === 'SIGNED_OUT') {
-        router.replace('/login')
-      }
-    })
-
-    // Chequeo inicial
-    supabaseBrowser.auth.getUser().then(({ data: { user } }) => {
-      if (active) {
-        if (user) {
-          fetchProfile(user)
-        } else {
-          // Esperar un momento breve para ver si se restaura la sesión
-          setTimeout(() => {
-            if (active) {
-              supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
-                if (session?.user) {
-                  fetchProfile(session.user)
-                } else if (!session) {
-                  router.replace('/login')
-                }
-              })
-            }
-          }, 1500)
-        }
-      }
-    })
-
-    // Timeout de seguridad global de 10 segundos
-    const safetyTimeout = setTimeout(() => {
-      if (active && !profileLoadedRef.current) {
-        console.warn("[AdminPage] Timeout global de 10s expiró sin perfil. Redirigiendo a /login...");
-        router.replace('/login')
-      }
-    }, 10000)
-
-    return () => {
-      active = false
-      subscription.unsubscribe()
-      clearTimeout(safetyTimeout)
-    }
-  }, [router])
 
   // Main fetch function
   const fetchData = async (silent = false) => {
