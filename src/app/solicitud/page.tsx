@@ -43,6 +43,7 @@ import { BadgeEstado } from '@/components/BadgeEstado'
 import SolicitudStepper from '@/components/SolicitudStepper'
 import type { Docente } from '@/lib/types'
 import { supabaseClient } from '@/lib/supabase-client'
+import { getAreaFromSeccion } from '@/lib/utils'
 import QRCode from 'qrcode'
 
 
@@ -350,17 +351,6 @@ export default function SolicitudPage() {
     }, 1500)
   }
 
-  const getAreaFromSeccion = (nombre: string | undefined): string | null => {
-    if (!nombre) return null
-    const n = nombre.toUpperCase()
-    if (n.includes('AUTOMOTRIZ') || n.includes('ELECTROMOVILIDAD') || n.includes('MECÁNICA') || n.includes('MECANICA')) {
-      return 'MECÁNICA Y ELECTROMOVILIDAD AUTOMOTRIZ'
-    }
-    if (n.includes('INDUSTRIAL') || n.includes('MANTENIMIENTO')) {
-      return 'MANTENIMIENTO INDUSTRIAL'
-    }
-    return null
-  }
 
   const filteredEquipos = useMemo(() => {
     const q = catalogSearch.trim().toLowerCase()

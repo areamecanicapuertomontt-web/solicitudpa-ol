@@ -54,3 +54,24 @@ export function getEstadoLabel(estado: string): string {
     default: return estado
   }
 }
+
+/**
+ * Mapea el nombre de una sección al área de carrera correspondiente.
+ * Usado para filtrar solicitudes/equipos por área académica.
+ */
+export function getAreaFromSeccion(nombre: string | undefined): string | null {
+  if (!nombre) return null
+  const n = nombre.toUpperCase()
+  if (
+    n.includes('AUTOMOTRIZ') ||
+    n.includes('ELECTROMOVILIDAD') ||
+    n.includes('MECÁNICA') ||
+    n.includes('MECANICA')
+  ) {
+    return 'MECÁNICA Y ELECTROMOVILIDAD AUTOMOTRIZ'
+  }
+  if (n.includes('INDUSTRIAL') || n.includes('MANTENIMIENTO')) {
+    return 'MANTENIMIENTO INDUSTRIAL'
+  }
+  return null
+}
