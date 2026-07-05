@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import PushHandler from '@/components/PushHandler'
 import PWAInstallPrompt from '@/components/PWAInstallPrompt'
+import UpdatePrompt from '@/components/UpdatePrompt'
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next"
 
@@ -22,6 +23,7 @@ export default function RootLayout({
       <body className="antialiased">
         <PushHandler />
         <PWAInstallPrompt />
+        <UpdatePrompt />
         {children}
         <SpeedInsights />
         <Analytics />
