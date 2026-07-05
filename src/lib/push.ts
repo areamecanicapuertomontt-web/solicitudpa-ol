@@ -26,29 +26,22 @@ export async function subscribeToPush(
     return null
   }
 
-  console.log('[push] Solicitando permiso de notificaciones...')
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') {
     console.warn('[push] Permiso de notificaciones no concedido:', permission)
     return null
   }
 
-  console.log('[push] Registrando Service Worker /sw.js...')
   const registration = await navigator.serviceWorker.register('/sw.js')
   await navigator.serviceWorker.ready
-  console.log('[push] ✅ Service Worker activo y listo')
 
   let subscription = await registration.pushManager.getSubscription()
 
   if (!subscription) {
-    console.log('[push] Creando nueva suscripción Push...')
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
     })
-    console.log('[push] ✅ Suscripción Push creada')
-  } else {
-    console.log('[push] ✅ Suscripción Push ya existente reutilizada')
   }
 
   const sub = subscription.toJSON()
@@ -59,7 +52,6 @@ export async function subscribeToPush(
 
   // Permitimos múltiples dispositivos por usuario. Las suscripciones muertas (410 Gone) se limpian desde el backend.
 
-  console.log('[push] Guardando suscripción en Supabase (tabla push_subscriptions)...')
   const { error } = await supabase.rpc('upsert_push_subscription', {
     p_endpoint: sub.endpoint,
     p_p256dh: sub.keys.p256dh,
@@ -71,6 +63,5 @@ export async function subscribeToPush(
     return null
   }
 
-  console.log('[push] ✅ Suscripción guardada correctamente en Supabase')
   return subscription
 }

@@ -29,7 +29,6 @@ export async function enviarPushNotificacion(
   }
 
   if (!subs || subs.length === 0) {
-    console.log('[push-server] No hay suscripciones Web Push activas registradas para los usuarios:', ids)
     return { success: true, count: 0 }
   }
 
@@ -64,7 +63,6 @@ export async function enviarPushNotificacion(
     }
 
     const result = await res.json()
-    console.log(`[push-server] ✅ Notificaciones enviadas: ${result.enviados}/${result.total} exitosas`)
 
     try {
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
@@ -77,7 +75,6 @@ export async function enviarPushNotificacion(
           leido: false
         }))
       )
-      console.log(`[push-server] ✅ Historial de notificaciones registrado para ${ids.length} usuarios`)
     } catch (dbErr) {
       console.error('[push-server] Error al guardar historial en BD:', dbErr)
     }

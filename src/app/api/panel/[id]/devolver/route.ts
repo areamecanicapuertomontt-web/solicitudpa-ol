@@ -93,7 +93,6 @@ export async function PATCH(
         console.error('[devolver/route] Error buscando perfil del docente por email:', docenteRes.error.message, '| email:', docenteEmail)
       } else if (docenteRes?.data) {
         docenteUserId = docenteRes.data.id
-        console.log('[devolver/route] ✅ Docente user_id resuelto:', docenteUserId, 'para email:', docenteEmail)
       } else {
         console.warn('[devolver/route] ⚠️ No se encontró perfil en perfiles para docente con email:', docenteEmail, '— el docente puede no tener cuenta.')
       }

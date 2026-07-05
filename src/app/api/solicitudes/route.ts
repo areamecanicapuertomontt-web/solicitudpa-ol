@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
           console.error('[solicitudes/route] Error buscando perfil del docente por email:', docenteRes.error.message, '| email:', docenteEmail)
         } else if (docenteRes?.data) {
           docenteUserId = docenteRes.data.id
-          console.log('[solicitudes/route] ✅ Docente user_id resuelto:', docenteUserId, 'para email:', docenteEmail)
         } else {
           console.warn('[solicitudes/route] ⚠️ No se encontró perfil en tabla perfiles para el docente con email:', docenteEmail, '— el docente puede no tener cuenta en el sistema.')
         }
