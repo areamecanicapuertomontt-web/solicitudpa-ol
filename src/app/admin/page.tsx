@@ -389,10 +389,10 @@ export default function AdminPage() {
     fetchData()
   }, [])
 
-  // Auto-refresh when tab changes
-  useEffect(() => {
-    fetchData(true)
-  }, [activeTab])
+  // (Se eliminó el refetch automático en cada cambio de pestaña: recargaba TODOS
+  // los docentes + alumnos + solicitudes con joins cada vez que se hacía clic en
+  // un tab. Los datos ya se cargan al montar, cada acción CRUD refresca, y queda
+  // el botón de refrescar manual en el header para actualizaciones puntuales.)
 
   // Custom notification utility
   const showNotification = (type: 'ok' | 'err', text: string) => {

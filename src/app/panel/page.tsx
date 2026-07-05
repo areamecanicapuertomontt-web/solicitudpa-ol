@@ -1000,13 +1000,11 @@ export default function PanelPage() {
     }
   }, [fetchSolicitudes])
 
-  // ── Polling cada 4 segundos silencioso (sin parpadeo) ────────────────────
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchSolicitudes(true)
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [fetchSolicitudes])
+  // ── Actualización en vivo SOLO por realtime (WebSocket) ─────────────────────
+  // Se eliminó el polling en bucle (antes cada 4s → ~15 requests/min por pestaña,
+  // trayendo toda la tabla con joins). Los cambios llegan por la suscripción
+  // realtime de arriba; si el realtime se cae, el usuario refresca con el botón
+  // del header.
 
   const filtradas = solicitudes.filter(s => {
     // 1. Filter by status tab selection
