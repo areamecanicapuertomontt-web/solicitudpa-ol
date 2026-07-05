@@ -74,27 +74,48 @@ export async function POST(request: NextRequest) {
     // IMPORTANTE: docente_id es el ID de la tabla 'docentes', NO el user_id de auth/perfiles.
     // Debemos resolver el user_id real del docente buscando por email en la tabla 'perfiles'.
     try {
-      // 4a. Resolver el user_id del docente desde la tabla perfiles usando su email
+      // Perfil del docente (por email) y del alumno (por email/rut) son búsquedas
+      // independientes entre sí → se resuelven en paralelo.
+      const docenteEmail = docente?.email
+      const orQuery: string[] = []
+      if (alumno_email) orQuery.push(`email.eq.${alumno_email}`)
+      if (rut) orQuery.push(`rut.eq.${rut}`)
+
+      const [docenteRes, alumnoRes] = await Promise.all([
+        docenteEmail
+          ? supabase.from('perfiles').select('id').eq('email', docenteEmail).maybeSingle()
+          : null,
+        orQuery.length > 0
+          ? supabase.from('perfiles').select('id').or(orQuery.join(',')).limit(1).maybeSingle()
+          : null,
+      ])
+
+      // 4a. Resolver el user_id del docente (con los mismos logs de diagnóstico)
       let docenteUserId: string | null = null
-      if (docente?.email) {
-        const { data: docenteProfile, error: docenteProfileErr } = await supabase
-          .from('perfiles')
-          .select('id')
-          .eq('email', docente.email)
-          .maybeSingle()
-        if (docenteProfileErr) {
-          console.error('[solicitudes/route] Error buscando perfil del docente por email:', docenteProfileErr.message, '| email:', docente.email)
-        } else if (docenteProfile) {
-          docenteUserId = docenteProfile.id
-          console.log('[solicitudes/route] ✅ Docente user_id resuelto:', docenteUserId, 'para email:', docente.email)
+      if (docenteEmail) {
+        if (docenteRes?.error) {
+          console.error('[solicitudes/route] Error buscando perfil del docente por email:', docenteRes.error.message, '| email:', docenteEmail)
+        } else if (docenteRes?.data) {
+          docenteUserId = docenteRes.data.id
+          console.log('[solicitudes/route] ✅ Docente user_id resuelto:', docenteUserId, 'para email:', docenteEmail)
         } else {
-          console.warn('[solicitudes/route] ⚠️ No se encontró perfil en tabla perfiles para el docente con email:', docente.email, '— el docente puede no tener cuenta en el sistema.')
+          console.warn('[solicitudes/route] ⚠️ No se encontró perfil en tabla perfiles para el docente con email:', docenteEmail, '— el docente puede no tener cuenta en el sistema.')
         }
       } else {
         console.warn('[solicitudes/route] ⚠️ El registro del docente no tiene email — imposible resolver user_id para push.')
       }
 
-      // 4b. Enviar push al docente (con su user_id real)
+      // 4b. Resolver el user_id del alumno
+      let alumnoUserId: string | null = null
+      if (orQuery.length > 0) {
+        if (alumnoRes?.error) {
+          console.error('[solicitudes/route] Error buscando perfil del alumno:', alumnoRes.error.message)
+        } else if (alumnoRes?.data) {
+          alumnoUserId = alumnoRes.data.id
+        }
+      }
+
+      // 4c. Enviar push al docente y al alumno (si tienen cuenta / suscripción)
       if (docenteUserId) {
         await enviarPushNotificacion(
           docenteUserId,
@@ -102,26 +123,6 @@ export async function POST(request: NextRequest) {
           `El alumno ${alumno} ha solicitado herramientas para "${asignatura}". Revisa el panel para decidir.`,
           `/panel`
         ).catch(e => console.error('[solicitudes/route] Error push docente:', e))
-      }
-
-      // 4c. Resolver el user_id del alumno y enviarle confirmación
-      let alumnoUserId: string | null = null
-      const orQuery: string[] = []
-      if (alumno_email) orQuery.push(`email.eq.${alumno_email}`)
-      if (rut) orQuery.push(`rut.eq.${rut}`)
-
-      if (orQuery.length > 0) {
-        const { data: alumnoProfile, error: alumnoProfileErr } = await supabase
-          .from('perfiles')
-          .select('id')
-          .or(orQuery.join(','))
-          .limit(1)
-          .maybeSingle()
-        if (alumnoProfileErr) {
-          console.error('[solicitudes/route] Error buscando perfil del alumno:', alumnoProfileErr.message)
-        } else if (alumnoProfile) {
-          alumnoUserId = alumnoProfile.id
-        }
       }
 
       if (alumnoUserId) {
