@@ -32,23 +32,22 @@ export async function PATCH(
       return Response.json({ error: 'Inicia sesión para realizar esta acción' }, { status: 401 })
     }
 
-    // 3. Obtener el perfil y verificar permisos
-    const { data: perf, error: perfErr } = await supabase
-      .from('perfiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
+    // 3. Perfil (permisos) y solicitud son independientes → se consultan en paralelo
+    const [
+      { data: perf, error: perfErr },
+      { data: solicitud, error: fetchErr },
+    ] = await Promise.all([
+      supabase.from('perfiles').select('*').eq('id', user.id).single(),
+      supabase
+        .from('solicitudes')
+        .select('*, docente:docentes(*), items:items_solicitud(*)')
+        .eq('id', id)
+        .single(),
+    ])
 
     if (perfErr || !perf || (perf.rol !== 'ADMIN' && perf.rol !== 'DOCENTE')) {
       return Response.json({ error: 'No tienes permisos para aprobar solicitudes' }, { status: 403 })
     }
-
-    // 3. Buscar la solicitud
-    const { data: solicitud, error: fetchErr } = await supabase
-      .from('solicitudes')
-      .select('*, docente:docentes(*), items:items_solicitud(*)')
-      .eq('id', id)
-      .single()
 
     if (fetchErr || !solicitud) {
       return Response.json({ error: 'Solicitud no encontrada' }, { status: 404 })
