@@ -220,7 +220,8 @@ export default function AdminMantencionPage() {
 
   useEffect(() => {
     async function checkAuth() {
-      const { data: { user } } = await supabaseBrowser.auth.getUser()
+      const { data: { session } } = await supabaseBrowser.auth.getSession()
+      const user = session?.user
       if (!user) { router.replace('/login'); return }
       const { data: perf } = await supabaseBrowser
         .from('perfiles').select('*').eq('id', user.id).single()

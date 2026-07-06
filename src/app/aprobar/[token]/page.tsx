@@ -31,8 +31,9 @@ export default function AprobarPage() {
     async function checkAuthAndLoad() {
       setLoading(true)
       try {
-        // 1. Verificar sesión
-        const { data: { user } } = await supabaseBrowser.auth.getUser()
+        // 1. Verificar sesión (getSession es local, no retiene el lock de auth)
+        const { data: { session } } = await supabaseBrowser.auth.getSession()
+        const user = session?.user
         if (!user) {
           // Redirigir a login indicando a dónde volver
           router.replace(`/login?next=/aprobar/${token}`)

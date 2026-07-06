@@ -14,32 +14,21 @@ export default function HomeAuthButtons() {
   useEffect(() => {
     async function getSession() {
       try {
-        // PASO 1 y 2: Leer sesión con timeout global ESTRICTO de 3s
-        const globalAuthTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de auth global')), 3000)
-        )
+        // getSession() es local e instantáneo (sin red, sin retener el lock de auth).
+        const { data: { session } } = await supabaseBrowser.auth.getSession()
+        const user = session?.user
 
-        const fetchUser = async () => {
-          const { data: { session } } = await supabaseBrowser.auth.getSession()
-          if (session?.user) return session.user
-          const { data: { user } } = await supabaseBrowser.auth.getUser()
-          return user
-        }
-
-        const user = await Promise.race([fetchUser(), globalAuthTimeout]) as any
-
-        if (user) {
-          const { data: perf } = await supabaseBrowser
-            .from('perfiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-          if (perf) {
-            setProfile(perf)
-          }
-        } else {
+        if (!user) {
           setProfile(null)
+          return
         }
+
+        const { data: perf } = await supabaseBrowser
+          .from('perfiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        setProfile(perf || null)
       } catch (err) {
         console.error('Error fetching session in HomeAuthButtons:', err)
         setProfile(null)

@@ -25,9 +25,9 @@ export default function NotificationBell() {
   // 1. Obtener usuario actual
   useEffect(() => {
     async function getUser() {
-      const { data: { user } } = await supabaseBrowser.auth.getUser()
-      if (user) {
-        setUserId(user.id)
+      const { data: { session } } = await supabaseBrowser.auth.getSession()
+      if (session?.user) {
+        setUserId(session.user.id)
       }
     }
     getUser()
