@@ -14,19 +14,19 @@ export default function HomeAuthButtons() {
   useEffect(() => {
     async function getSession() {
       try {
-        // PASO 1: Leer sesión desde caché local (instantáneo, sin red)
-        const { data: { session } } = await supabaseBrowser.auth.getSession()
-        let user = session?.user
+        // PASO 1 y 2: Leer sesión con timeout global ESTRICTO de 3s
+        const globalAuthTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de auth global')), 3000)
+        )
 
-        if (!user) {
-          // PASO 2: Si no hay caché, intentar con getUser() pero con timeout de 3s
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), 3000)
-          )
-          const userPromise = supabaseBrowser.auth.getUser()
-          const { data } = await Promise.race([userPromise, timeoutPromise]) as any
-          user = data?.user
+        const fetchUser = async () => {
+          const { data: { session } } = await supabaseBrowser.auth.getSession()
+          if (session?.user) return session.user
+          const { data: { user } } = await supabaseBrowser.auth.getUser()
+          return user
         }
+
+        const user = await Promise.race([fetchUser(), globalAuthTimeout]) as any
 
         if (user) {
           const { data: perf } = await supabaseBrowser

@@ -452,19 +452,19 @@ export default function SolicitudPage() {
           setIsSlowConnection(true)
         }, 5000)
 
-        // PASO 1: Leer sesión desde caché local (instantáneo, sin red)
-        const { data: { session } } = await supabaseClient.auth.getSession()
-        let user = session?.user
+        // PASO 1 y 2: Intentar getSession y getUser con un timeout global ESTRICTO de 4s
+        const globalAuthTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de auth global')), 4000)
+        )
 
-        if (!user) {
-          // PASO 2: Si no hay caché, intentar con getUser() pero con timeout de 4s
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout de auth')), 4000)
-          )
-          const userPromise = supabaseClient.auth.getUser()
-          const { data } = await Promise.race([userPromise, timeoutPromise]) as any
-          user = data?.user
+        const fetchUser = async () => {
+          const { data: { session } } = await supabaseClient.auth.getSession()
+          if (session?.user) return session.user
+          const { data: { user } } = await supabaseClient.auth.getUser()
+          return user
         }
+
+        const user = await Promise.race([fetchUser(), globalAuthTimeout]) as any
 
         if (!user) {
           // No hay sesión, redirigir a login
