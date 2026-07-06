@@ -1,6 +1,6 @@
 // public/sw.js — Service Worker para Web Push nativo y PWA (Cache-busting)
 
-const CACHE_NAME = "pañol-cache-v12";
+const CACHE_NAME = "pañol-cache-v13";
 
 self.addEventListener("install", (event) => {
   // Se quitó self.skipWaiting() automático para permitir que UpdatePrompt

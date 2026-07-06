@@ -452,9 +452,7 @@ export default function SolicitudPage() {
           setIsSlowConnection(true)
         }, 5000)
 
-        // PASO 1: getSession() es LOCAL e instantáneo (no hace red) → suficiente para
-        // prefiljar el formulario. Evitamos getUser() (que sí hace red y puede colgar
-        // en cold start / móvil) en la ruta crítica.
+        // getSession() es LOCAL e instantáneo (lee el JWT persistido, sin red).
         const { data: { session } } = await supabaseClient.auth.getSession()
         const user = session?.user
 
@@ -464,61 +462,55 @@ export default function SolicitudPage() {
           return
         }
 
-        // PASO 2: Cargar perfil desde Supabase con timeout tolerante (10s). Si falla o
-        // tarda, caemos a los metadatos de auth como fallback — nunca bloqueamos el
-        // formulario con un error duro.
-        const profileTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de perfil')), 10000)
-        )
-        const profilePromise = supabaseClient
+        // Aplica un perfil al formulario (reutilizable: metadata del token y BD).
+        const applyProfile = (perf: any) => {
+          setProfile(perf)
+          setValue('alumno', perf.nombre || '')
+          setValue('rut', perf.rut || '')
+          setValue('alumno_email', perf.email || '')
+          if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
+
+          const carreraFromProfile = perf.carrera || null
+          const seccionVal = perf.seccion || ''
+          let detected = carreraFromProfile
+          if (!detected) {
+            detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi') ? 'IMI'
+              : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi') ? 'MI'
+              : 'ALL'
+          }
+          setSelectedCarrera(detected || 'ALL')
+          setValue('seccion', seccionVal || 'N/A')
+        }
+
+        // PREFILL INSTANTÁNEO desde los metadatos del JWT (sin esperar a la BD). El
+        // token ya trae nombre, rut, email, jornada, seccion y carrera, así que la UI
+        // queda usable de inmediato aunque Supabase esté frío (cold start).
+        const meta = (user.user_metadata || {}) as Record<string, any>
+        applyProfile({
+          id: user.id,
+          email: user.email,
+          nombre: meta.nombre || 'Usuario Inacap',
+          rol: meta.rol || 'ALUMNO',
+          rut: meta.rut || '',
+          jornada: meta.jornada || 'D',
+          seccion: meta.seccion || '',
+          carrera: meta.carrera || null,
+        })
+        setProfileLoaded(true)
+        clearTimeout(slowConnectionTimer)
+
+        // EN SEGUNDO PLANO: traer el perfil completo de la BD y refrescar si llega
+        // (por si los metadatos del token estuvieran desactualizados). No bloquea la UI.
+        supabaseClient
           .from('perfiles')
           .select('*')
           .eq('id', user.id)
           .single()
-
-        let perf = null
-        try {
-          const { data, error } = await Promise.race([profilePromise, profileTimeout]) as any
-          if (!error && data) perf = data
-        } catch (e) {
-          console.error("Error cargando perfil desde tabla perfiles:", e)
-        }
-
-        // Fallback: Si no existe en la tabla perfiles o falló red, usamos metadatos de auth
-        if (!perf) {
-          perf = {
-            id: user.id,
-            email: user.email,
-            nombre: user.user_metadata?.nombre || 'Usuario Inacap',
-            rol: user.user_metadata?.rol || 'ALUMNO',
-            rut: user.user_metadata?.rut || '',
-            jornada: user.user_metadata?.jornada || 'D',
-            seccion: user.user_metadata?.seccion || '',
-          }
-        }
-
-        setProfile(perf)
-        setValue('alumno', perf.nombre || '')
-        setValue('rut', perf.rut || '')
-        setValue('alumno_email', perf.email || '')
-        if (perf.jornada) setValue('jornada', perf.jornada as 'D' | 'V')
-
-        const carreraFromProfile = perf.carrera || null
-        const seccionVal = perf.seccion || ''
-        let detected = carreraFromProfile
-        if (!detected) {
-          detected = seccionVal.toLowerCase().includes('mantenimiento') || seccionVal.toLowerCase().includes('imi') ? 'IMI'
-            : seccionVal.toLowerCase().includes('automotriz') || seccionVal.toLowerCase().includes('mi') ? 'MI'
-            : 'ALL'
-        }
-        setSelectedCarrera(detected || 'ALL')
-        setValue('seccion', seccionVal || 'N/A')
-
-        setProfileLoaded(true)
-        clearTimeout(slowConnectionTimer)
+          .then(({ data, error }) => {
+            if (!error && data) applyProfile(data)
+          })
       } catch (err) {
-        console.error('[solicitud] Timeout o error de red en carga de perfil:', err)
-        setProfileError('No se pudo cargar tu perfil por un problema de red. Por favor, recarga la página.')
+        console.error('[solicitud] Error cargando perfil:', err)
         setProfileLoaded(true)
         clearTimeout(slowConnectionTimer)
       }

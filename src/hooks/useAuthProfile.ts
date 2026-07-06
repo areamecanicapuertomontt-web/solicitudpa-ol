@@ -56,74 +56,48 @@ export function useAuthProfile({
     async function fetchProfile(user: { id: string; email?: string; user_metadata?: Record<string, unknown> }) {
       if (!user) return
 
-      let profileData: AuthProfile | null = null
-      let profileError: unknown = null
+      const meta = user.user_metadata || {}
+      const metaRol = (meta.rol as string) || fallbackRole
 
+      // Gate de rol optimista con el rol del JWT (firmado por Supabase, no manipulable).
+      if (allowedRoles && !allowedRoles.includes(metaRol)) {
+        router.replace('/login')
+        return
+      }
+
+      // Perfil INSTANTÁNEO desde metadata del JWT (sin red) → UI usable de inmediato,
+      // aunque Supabase esté frío (cold start). Nunca esperamos a la BD para pintar.
+      const fallbackPerf: AuthProfile = {
+        id: user.id,
+        email: user.email ?? '',
+        nombre: (meta.nombre as string) || 'Usuario Inacap',
+        rol: metaRol,
+        rut: (meta.rut as string) || '',
+        jornada: (meta.jornada as string) || 'D',
+        seccion: (meta.seccion as string) || '',
+      }
+      if (!active) return
+      setProfile(fallbackPerf)
+      setLoadingProfile(false)
+      profileLoadedRef.current = true
+
+      // EN SEGUNDO PLANO: perfil real desde la BD; refresca si llega. No bloquea la UI.
       try {
-        const queryPromise = supabaseBrowser
+        const { data, error } = await supabaseBrowser
           .from('perfiles')
           .select('*')
           .eq('id', user.id)
           .single()
-
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de consulta perfiles')), 10000)
-        )
-
-        const res = await Promise.race([queryPromise, timeoutPromise]) as { data: AuthProfile | null; error: unknown }
-        profileData = res.data
-        profileError = res.error
-      } catch (err) {
-        profileError = err
-      }
-
-      if (!active) return
-
-      if (!profileError && profileData) {
-        // Verificar rol si se especificaron roles permitidos
-        if (allowedRoles && !allowedRoles.includes(profileData.rol)) {
-          router.replace('/login')
-          return
-        }
-        setProfile(profileData)
-        setLoadingProfile(false)
-        profileLoadedRef.current = true
-      } else {
-        // Fallback con user_metadata mientras se resuelve la sincronización de token RLS
-        const fallbackPerf: AuthProfile = {
-          id: user.id,
-          email: user.email ?? '',
-          nombre: (user.user_metadata?.nombre as string) || 'Usuario Inacap',
-          rol: (user.user_metadata?.rol as string) || fallbackRole,
-          rut: (user.user_metadata?.rut as string) || '',
-          jornada: (user.user_metadata?.jornada as string) || 'D',
-          seccion: (user.user_metadata?.seccion as string) || '',
-        }
-        setProfile(fallbackPerf)
-        setLoadingProfile(false)
-        profileLoadedRef.current = true
-
-        // Reintento a 1.5s para obtener el perfil real desde BD (sincronización de token RLS)
-        setTimeout(async () => {
-          if (!active) return
-          try {
-            const retryRes = await Promise.race([
-              supabaseBrowser.from('perfiles').select('*').eq('id', user.id).single(),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout reintento')), 60000)
-              ),
-            ]) as { data: AuthProfile | null; error: unknown }
-            if (!retryRes.error && retryRes.data) {
-              if (allowedRoles && !allowedRoles.includes(retryRes.data.rol)) {
-                router.replace('/login')
-                return
-              }
-              if (active) setProfile(retryRes.data)
-            }
-          } catch {
-            // Silencioso — el fallback ya está activo
+        if (!active) return
+        if (!error && data) {
+          if (allowedRoles && !allowedRoles.includes(data.rol)) {
+            router.replace('/login')
+            return
           }
-        }, 1500)
+          setProfile(data)
+        }
+      } catch {
+        // Silencioso — el perfil desde metadata ya está activo.
       }
     }
 
