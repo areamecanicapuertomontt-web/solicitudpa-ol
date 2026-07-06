@@ -452,19 +452,11 @@ export default function SolicitudPage() {
           setIsSlowConnection(true)
         }, 5000)
 
-        // PASO 1 y 2: Intentar getSession y getUser con un timeout global ESTRICTO de 4s
-        const globalAuthTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de auth global')), 4000)
-        )
-
-        const fetchUser = async () => {
-          const { data: { session } } = await supabaseClient.auth.getSession()
-          if (session?.user) return session.user
-          const { data: { user } } = await supabaseClient.auth.getUser()
-          return user
-        }
-
-        const user = await Promise.race([fetchUser(), globalAuthTimeout]) as any
+        // PASO 1: getSession() es LOCAL e instantáneo (no hace red) → suficiente para
+        // prefiljar el formulario. Evitamos getUser() (que sí hace red y puede colgar
+        // en cold start / móvil) en la ruta crítica.
+        const { data: { session } } = await supabaseClient.auth.getSession()
+        const user = session?.user
 
         if (!user) {
           // No hay sesión, redirigir a login
@@ -472,9 +464,11 @@ export default function SolicitudPage() {
           return
         }
 
-        // PASO 3: Cargar perfil desde Supabase con timeout de 4s
+        // PASO 2: Cargar perfil desde Supabase con timeout tolerante (10s). Si falla o
+        // tarda, caemos a los metadatos de auth como fallback — nunca bloqueamos el
+        // formulario con un error duro.
         const profileTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de perfil')), 4000)
+          setTimeout(() => reject(new Error('Timeout de perfil')), 10000)
         )
         const profilePromise = supabaseClient
           .from('perfiles')

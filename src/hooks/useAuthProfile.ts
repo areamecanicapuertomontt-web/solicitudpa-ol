@@ -138,19 +138,20 @@ export function useAuthProfile({
       }
     )
 
-    // Carga inicial: getUser es más rápido que getSession porque no hace red si hay token en memoria
-    supabaseBrowser.auth.getUser().then(({ data: { user } }) => {
+    // Carga inicial: getSession() es LOCAL e instantáneo (no hace red) y no compite
+    // por el lock de auth como getUser(). Suficiente para resolver el usuario actual.
+    supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
       if (!active) return
-      if (user) {
-        fetchProfile(user)
+      if (session?.user) {
+        fetchProfile(session.user)
       } else {
         // Puede ser que el token aún no se haya hidratado. Esperar 1.5s y reintentar.
         setTimeout(() => {
           if (!active) return
-          supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user) {
-              fetchProfile(session.user)
-            } else if (!session) {
+          supabaseBrowser.auth.getSession().then(({ data: { session: session2 } }) => {
+            if (session2?.user) {
+              fetchProfile(session2.user)
+            } else {
               router.replace('/login')
             }
           })
