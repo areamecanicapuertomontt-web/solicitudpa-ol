@@ -123,30 +123,31 @@ export default function PushHandler() {
 
     let lastSubscribedUserId: string | null = null
 
-    // Suscribirse a cambios de autenticación en Supabase
-    const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[PushHandler] Cambio de estado auth: ${event}. Sesión activa:`, !!session)
+    // ⚠️ CRÍTICO: el callback de onAuthStateChange se ejecuta MIENTRAS supabase-js
+    // mantiene el lock de auth (navigator.locks). Si hacemos trabajo pesado o llamamos
+    // a Supabase aquí de forma síncrona (subscribeToPush → rpc), retenemos el lock y
+    // bloqueamos getSession()/getUser() del RESTO de la app → skeletons infinitos y el
+    // mensaje "servidor despertando". Por eso el callback es SÍNCRONO y difiere el
+    // trabajo con setTimeout(0), que libera el lock antes de ejecutarlo.
+    const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange((event, session) => {
       const currentId = session?.user?.id
       if (currentId && currentId !== lastSubscribedUserId) {
-        console.log(`[PushHandler] Usuario autenticado (${currentId}). Iniciando suscripción push...`)
         lastSubscribedUserId = currentId
-        await subscribeToPush(supabaseBrowser, currentId)
+        setTimeout(() => { subscribeToPush(supabaseBrowser, currentId) }, 0)
       } else if (!currentId) {
-        console.log('[PushHandler] Sesión cerrada.')
         lastSubscribedUserId = null
       }
     })
 
-    // También ejecutar si ya hay sesión activa al montar el componente
-    async function checkCurrentUser() {
-      const { data: { user } } = await supabaseBrowser.auth.getUser()
+    // Si ya hay sesión al montar: getSession() es LOCAL (no red, no retiene el lock
+    // como getUser). También diferimos la suscripción fuera del flujo de auth.
+    supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
       if (user && user.id !== lastSubscribedUserId) {
-        console.log(`[PushHandler] Sesión activa encontrada (${user.id}). Suscribiendo...`)
         lastSubscribedUserId = user.id
-        await subscribeToPush(supabaseBrowser, user.id)
+        setTimeout(() => { subscribeToPush(supabaseBrowser, user.id) }, 0)
       }
-    }
-    checkCurrentUser()
+    })
 
     return () => {
       subscription.unsubscribe()

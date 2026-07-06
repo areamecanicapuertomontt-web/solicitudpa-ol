@@ -101,11 +101,13 @@ export function useAuthProfile({
       }
     }
 
-    // Suscripción a cambios de sesión (login / logout en tiempo real)
+    // Suscripción a cambios de sesión (login / logout en tiempo real).
+    // Callback SÍNCRONO y sin await: no debe retener el lock de auth mientras corre
+    // fetchProfile (que consulta la BD). Se dispara en segundo plano con `void`.
     const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (session?.user) {
-          await fetchProfile(session.user)
+          void fetchProfile(session.user)
         } else if (event === 'SIGNED_OUT') {
           router.replace('/login')
         }
