@@ -273,7 +273,7 @@ export default function SolicitudPage() {
     resolver: zodResolver(schema),
     defaultValues: {
       jornada: 'D',
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }),
       items: [{ cantidad: 1, descripcion: '', estado_item: 'CUALQUIERA' }],
     },
   })
@@ -799,7 +799,8 @@ export default function SolicitudPage() {
                 <input
                   {...register('fecha')}
                   type="date"
-                  className="input-field"
+                  className="input-field opacity-60 cursor-not-allowed"
+                  readOnly
                 />
                 {errors.fecha && <p className="text-xs mt-1" style={{ color: 'var(--nacap-red)' }}>{errors.fecha.message}</p>}
               </div>
