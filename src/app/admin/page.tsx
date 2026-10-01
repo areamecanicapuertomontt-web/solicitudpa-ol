@@ -1557,7 +1557,7 @@ export default function AdminPage() {
                     required
                     type="email"
                     className="input-field"
-                    placeholder="diego.henriquez@inacapmail.cl"
+                    placeholder="nombre.apellido@inacapmail.cl"
                     value={alumnoForm.email}
                     onChange={e => setAlumnoForm(p => ({ ...p, email: e.target.value }))}
                   />
