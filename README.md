@@ -6,7 +6,7 @@ El alumno solicita, el docente aprueba, el pañol entrega con un código o QR y 
 Desarrollada en la práctica profesional de junio–julio 2026. La **documentación técnica completa** (formato INACAP) está en [`docs/Documentacion_Tecnica_Sistema_Panol.docx`](docs/Documentacion_Tecnica_Sistema_Panol.docx).
 
 > [!IMPORTANT]
-> **La base de datos y el correo NO vienen incluidos.** El proyecto de Supabase original quedó pausado o eliminado por inactividad, y la cuenta de Brevo (correo) era del equipo anterior.
+> **La base de datos y el correo NO vienen incluidos.** El proyecto de Supabase original y la cuenta de Brevo (correo) pertenecen al equipo anterior y no se traspasan.
 > Hay que **crear un proyecto Supabase nuevo** y **una cuenta Brevo nueva** siguiendo la [puesta en marcha](#puesta-en-marcha). Todo el esquema está en [`supabase/schema.sql`](supabase/schema.sql).
 
 ---
