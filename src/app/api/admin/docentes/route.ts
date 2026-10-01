@@ -1,8 +1,12 @@
 import { createServerClient } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/api-auth'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ['ADMIN', 'PANOL'])
+    if (!auth.ok) return auth.response
+
     const body = await request.json()
     const { nombre, email, asignatura } = body
 

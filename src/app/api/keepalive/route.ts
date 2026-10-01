@@ -1,6 +1,6 @@
 // src/app/api/keepalive/route.ts
 // Endpoint liviano para mantener Supabase activo en el plan gratuito.
-// Es llamado cada 5 minutos por un cron job de GitHub Actions.
+// Es llamado dos veces al día por un cron de GitHub Actions (.github/workflows/keepalive.yml).
 // Solo hace una consulta mínima (sin joins, sin auth) para despertar la BD.
 
 import { createClient } from '@supabase/supabase-js'

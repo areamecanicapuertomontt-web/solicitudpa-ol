@@ -673,6 +673,18 @@ export default function PanelPage() {
     safetyTimeoutMs: 60000,
   })
 
+  // ── Presencia: el personal del pañol reporta que está conectado (lo ve el alumno en /solicitud) ──
+  const rolActual = profile?.rol
+  useEffect(() => {
+    if (rolActual !== 'PANOL' && rolActual !== 'ADMIN') return
+    const ping = () => { supabaseBrowser.rpc('registrar_presencia').then(({ error }) => {
+      if (error) console.warn('[panel] No se pudo registrar presencia:', error.message)
+    }) }
+    ping()
+    const interval = setInterval(ping, 30000)
+    return () => clearInterval(interval)
+  }, [rolActual])
+
   // ── Pagination States ──
   const itemsPerPage = 10
   const [page, setPage] = useState(1)

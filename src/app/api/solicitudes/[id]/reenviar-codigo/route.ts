@@ -78,7 +78,7 @@ export async function POST(
       alumnoUserId,
       'Código de Retiro 📦',
       `El código para retirar tus materiales es: ${solicitud.codigo_entrega}`,
-      '/mis-solicitudes'
+      `/solicitud?tab=mis-solicitudes&id=${id}`
     ).catch(e => console.error('Error al reenviar código por push:', e))
 
     return Response.json({ ok: true })

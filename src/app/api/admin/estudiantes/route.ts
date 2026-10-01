@@ -1,8 +1,12 @@
 import { createServerClient } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/api-auth'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ['ADMIN', 'PANOL'])
+    if (!auth.ok) return auth.response
+
     const body = await request.json()
     const { nombre, email, rut, seccion, carrera, jornada } = body
 
@@ -10,14 +14,20 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'Datos incompletos' }, { status: 400 })
     }
 
+    // La contraseña inicial se define en el servidor (variable de entorno), nunca en el código.
+    const passwordInicial = process.env.DEFAULT_STUDENT_PASSWORD
+    if (!passwordInicial) {
+      return Response.json({ error: 'Falta configurar DEFAULT_STUDENT_PASSWORD en el servidor' }, { status: 500 })
+    }
+
     const supabase = createServerClient()
-    
+
     // Creamos el usuario en Supabase Auth.
     // Esto disparará automáticamente el trigger public.handle_new_user()
     // el cual insertará o actualizará en public.perfiles.
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email,
-      password: 'AlumnoInacap2026!',
+      password: passwordInicial,
       email_confirm: true,
       user_metadata: {
         nombre,
@@ -68,6 +78,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ['ADMIN', 'PANOL'])
+    if (!auth.ok) return auth.response
+
     const body = await request.json()
     const { id, nombre, email, rut, seccion, carrera, jornada } = body
 
@@ -124,6 +137,9 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ['ADMIN', 'PANOL'])
+    if (!auth.ok) return auth.response
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 

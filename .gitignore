@@ -42,3 +42,12 @@ next-env.d.ts
 
 # database scripts with student/teacher lists
 *.sql
+!.env.example
+
+# ...excepto el esquema y datos base oficiales del proyecto
+!supabase/*.sql
+
+# scripts de depuración locales, datos personales y archivos temporales de Supabase CLI
+/scratch
+/datos-privados
+/supabase/.temp

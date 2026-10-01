@@ -21,11 +21,9 @@ export default function OlvidarContrasenaPage() {
       const emailTrimmed = email.trim().toLowerCase()
 
       // Verificar si el correo está registrado en la base de datos
+      // RPC SECURITY DEFINER (el visitante no tiene sesión, así que no puede leer `perfiles`)
       const { data: profileExists, error: profileError } = await supabaseClient
-        .from('perfiles')
-        .select('email')
-        .eq('email', emailTrimmed)
-        .maybeSingle()
+        .rpc('email_registrado', { p_email: emailTrimmed })
 
       if (profileError) {
         console.error('Error verificando perfil:', profileError)

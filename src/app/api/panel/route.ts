@@ -1,4 +1,5 @@
-import { createServerClient, createCookieClient } from '@/lib/supabase-server'
+import { createServerClient } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/api-auth'
 import { NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -6,34 +7,28 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const estado = searchParams.get('estado')
 
-    // 1. Obtener usuario autenticado usando el cliente de cookies
-    const cookieClient = await createCookieClient()
-    const { data: { user }, error: authError } = await cookieClient.auth.getUser()
-    if (authError || !user) {
-      return Response.json({ error: 'No autorizado' }, { status: 401 })
-    }
+    // 1. Usuario autenticado con rol de personal (el rol se lee desde perfiles)
+    const auth = await requireAuth(request, ['ADMIN', 'PANOL', 'DOCENTE'])
+    if (!auth.ok) return auth.response
 
     const supabase = createServerClient()
-
-    // 2. Obtener rol del perfil
-    const { data: perfil, error: perfilError } = await supabase
-      .from('perfiles')
-      .select('rol')
-      .eq('id', user.id)
-      .single()
-
-    if (perfilError || !perfil) {
-      return Response.json({ error: 'Perfil no encontrado' }, { status: 404 })
-    }
 
     let query = supabase
       .from('solicitudes')
       .select('*, docente:docentes(*), items:items_solicitud(*)')
       .order('created_at', { ascending: false })
 
-    // 3. Si es docente, filtrar sólo por sus solicitudes
-    if (perfil.rol === 'DOCENTE') {
-      query = query.eq('docente_id', user.id)
+    // 2. Si es docente, filtrar sólo por sus solicitudes. El registro en `docentes`
+    //    puede tener el mismo id que el usuario de Auth o sólo coincidir por email.
+    if (auth.perfil.rol === 'DOCENTE') {
+      const email = (auth.perfil.email || auth.user.email || '').toLowerCase()
+      const { data: docentesPropios } = await supabase
+        .from('docentes')
+        .select('id')
+        .or(`id.eq.${auth.user.id}${email ? `,email.ilike.${email}` : ''}`)
+      const ids = (docentesPropios || []).map(d => d.id)
+      if (ids.length === 0) return Response.json({ solicitudes: [] })
+      query = query.in('docente_id', ids)
     }
 
     if (estado) {

@@ -406,29 +406,16 @@ export default function SolicitudPage() {
   useEffect(() => {
     async function loadActivePanoleros() {
       try {
-        const { data, error } = await supabaseClient
-          .from('perfiles')
-          .select('nombre, rol, last_seen')
-          .in('rol', ['PANOL', 'ADMIN'])
-        
+        // RPC SECURITY DEFINER: devuelve sólo nombre/rol del personal con presencia en los últimos 90 s
+        const { data, error } = await supabaseClient.rpc('panoleros_activos')
+
         if (error) {
-          console.warn("Error al cargar perfiles activos (posiblemente falta ejecutar SQL en Supabase):", error.message)
+          console.warn("Error al cargar pañoleros activos:", error.message)
           setLoadingPanoleros(false)
           return
         }
 
-        if (data) {
-          const now = new Date()
-          const active = data.filter((p: any) => {
-            if (!p.last_seen) return false
-            const lastSeenDate = new Date(p.last_seen)
-            const diffMs = now.getTime() - lastSeenDate.getTime()
-            // Considerar activo si reportó en los últimos 90 segundos (90000 ms)
-            // Tolerancia de desfase de reloj cliente-servidor de hasta 30 segundos en el futuro (diffMs >= -30000)
-            return diffMs >= -30000 && diffMs < 90000
-          })
-          setActivePanoleros(active)
-        }
+        if (data) setActivePanoleros(data)
       } catch (err) {
         console.error("Error al verificar presencia de pañoleros:", err)
       } finally {

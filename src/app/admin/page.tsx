@@ -371,7 +371,7 @@ export default function AdminPage() {
         throw new Error(data.error || 'Ocurrió un error en el servidor')
       }
 
-      showNotification('ok', isEdit ? 'Alumno actualizado correctamente' : 'Alumno registrado correctamente con clave temporal AlumnoInacap2026!')
+      showNotification('ok', isEdit ? 'Alumno actualizado correctamente' : 'Alumno registrado correctamente con la clave temporal por defecto')
       cancelAlumnoForm()
       fetchData(true)
     } catch (err: any) {
@@ -1620,7 +1620,7 @@ export default function AdminPage() {
                   <div className="p-3 rounded-lg bg-red-950/20 border border-red-500/10 flex items-start gap-2">
                     <Info size={14} className="text-red-400 mt-0.5 flex-shrink-0" />
                     <p className="text-[10px] text-gray-400 leading-normal">
-                      La cuenta se creará automáticamente en Supabase Auth con la contraseña por defecto: <code className="text-red-300 font-mono font-bold">AlumnoInacap2026!</code>
+                      La cuenta se creará automáticamente en Supabase Auth con la contraseña temporal por defecto configurada en el servidor (<code className="text-red-300 font-mono font-bold">DEFAULT_STUDENT_PASSWORD</code>). Pide al alumno cambiarla con &quot;Olvidé mi contraseña&quot;.
                     </p>
                   </div>
                 )}

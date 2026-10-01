@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/api-auth'
 import { enviarPushNotificacion } from '@/lib/push-server'
 import { formatFecha, getJornadaLabel } from '@/lib/utils'
 import { NextRequest } from 'next/server'
@@ -6,6 +7,9 @@ import { v4 as uuidv4 } from 'uuid'
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (!auth.ok) return auth.response
+
     const body = await request.json()
     const { alumno, rut, alumno_email, asignatura, seccion, jornada, carrera, fecha, docente_id, items } = body
 
@@ -145,6 +149,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ['ADMIN', 'PANOL'])
+    if (!auth.ok) return auth.response
+
     const { searchParams } = request.nextUrl
     const estado = searchParams.get('estado')
 

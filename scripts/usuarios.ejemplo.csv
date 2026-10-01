@@ -1,0 +1,6 @@
+email,nombre,rol,rut,jornada,seccion,carrera,asignatura
+admin.panol@ejemplo.cl,Administrador Pañol,ADMIN,,,,,
+panolero@ejemplo.cl,Encargado de Pañol,PANOL,,,,,
+docente.prueba@ejemplo.cl,Docente de Prueba,DOCENTE,,,,,Mantenimiento de Bombas
+alumno.diurno@ejemplo.cl,Alumno Diurno Prueba,ALUMNO,11111111-1,D,IMI-101,IMI,
+alumno.vespertino@ejemplo.cl,Alumno Vespertino Prueba,ALUMNO,22222222-2,V,MI-201,MI,

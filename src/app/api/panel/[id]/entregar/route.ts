@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/api-auth'
 import { NextRequest } from 'next/server'
 
 export async function PATCH(
@@ -6,6 +7,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth(request, ['ADMIN', 'PANOL'])
+    if (!auth.ok) return auth.response
+
     const { id } = await params
     const body = await request.json()
     const { codigo } = body
@@ -33,7 +37,7 @@ export async function PATCH(
 
     // Verificar código
     if (solicitud.codigo_entrega !== codigo.trim()) {
-      return Response.json({ error: 'Código incorrecto. Revisa el correo del pañol.' }, { status: 400 })
+      return Response.json({ error: 'Código incorrecto. Verifica el código que muestra el alumno.' }, { status: 400 })
     }
 
     // Marcar como entregada
